@@ -323,7 +323,7 @@ def volumetric_rendering(rgb, density, t_samples, dirs, white_bkgd):
     density_delta = density[..., 0] * delta
 
     alpha = 1 - torch.exp(-density_delta)
-    trans = torch.exp(torch.cat([
+    trans = torch.exp(-torch.cat([
         torch.zeros_like(density_delta[..., :1]),
         torch.cumsum(density_delta[..., :-1], dim=-1)
     ],
