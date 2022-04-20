@@ -34,6 +34,7 @@ def main(hparams):
                                default_hp_metric=False)
 
     trainer = Trainer(
+        gradient_clip_algorithm='norm',
         max_steps=hparams['optimizer.max_steps'],
         max_epochs=-1,
         callbacks=callbacks,

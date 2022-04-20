@@ -90,7 +90,7 @@ class MLP(torch.nn.Module):
                 [batch, num_samples, num_density_channels].
         """
         num_samples = x.shape[1]
-        inputs = x
+        inputs = x  # [B, N, 2*3*L]
         for i, layer in enumerate(self.layers):
             x = layer(x)
             if i % self.skip_index == 0 and i > 0:
@@ -102,6 +102,7 @@ class MLP(torch.nn.Module):
             # Broadcast condition from [batch, feature] to
             # [batch, num_samples, feature] since all the samples along the same ray
             # have the same viewdir.
+            # view_direction: [B, 2*3*L] -> [B, N, 2*3*L]
             view_direction = repeat(view_direction, 'batch feature -> batch sample feature', sample=num_samples)
             x = torch.cat([bottleneck, view_direction], dim=-1)
             # Here use 1 extra layer to align with the original nerf model.
@@ -159,7 +160,6 @@ class MipNerf(torch.nn.Module):
                        mlp_skip_index, mlp_num_rgb_channels, mlp_num_density_channels, mlp_net_activation,
                        mlp_xyz_dim, mlp_view_dim)
         if rgb_activation == 'sigmoid':  # The RGB activation.
-            # TODO: torch.sigmoid and torch.nn.Sigmoid?
             self.rgb_activation = torch.nn.Sigmoid()
         else:
             raise NotImplementedError
@@ -178,8 +178,6 @@ class MipNerf(torch.nn.Module):
         Returns:
             ret: list, [*(rgb, distance, acc)]
         """
-        # Construct the MLP.
-        # mlp = MLP()
 
         ret = []
         t_samples, weights = None, None
@@ -216,7 +214,7 @@ class MipNerf(torch.nn.Module):
                 means_covs,
                 self.min_deg_point,
                 self.max_deg_point,
-            )
+            )  # samples_enc: [B, N, 2*3*L]  L:(max_deg_point - min_deg_point)
 
             # Point attribute predictions
             if self.use_viewdirs:
@@ -235,9 +233,9 @@ class MipNerf(torch.nn.Module):
                 raw_density += self.density_noise * torch.randn(raw_density.shape, dtype=raw_density.dtype)
 
             # Volumetric rendering.
-            rgb = self.rgb_activation(raw_rgb)
+            rgb = self.rgb_activation(raw_rgb) # [B, N, 3]
             rgb = rgb * (1 + 2 * self.rgb_padding) - self.rgb_padding
-            density = self.density_activation(raw_density + self.density_bias)
+            density = self.density_activation(raw_density + self.density_bias)  # [B, N, 1]
             comp_rgb, distance, acc, weights = volumetric_rendering(
                 rgb,
                 density,

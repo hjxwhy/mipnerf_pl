@@ -116,7 +116,6 @@ def convert_to_nerfdata(basedir, newdir, n_down):
         json.dump(bigmeta, f, ensure_ascii=False, indent=4)
 
 
-# @hydra.main(config_path='/home/hjx/mipnerf_pl/configs/', config_name="multiscale")
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--blender_dir", help="data root path", type=str,

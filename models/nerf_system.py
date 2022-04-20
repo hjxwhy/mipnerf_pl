@@ -150,7 +150,7 @@ class MipNeRFSystem(LightningModule):
         val_psnr_corse = calc_psnr(corse_rgb, rgb_gt)
         val_psnr_fine = calc_psnr(fine_rgb, rgb_gt)
 
-        log = {'val_loss': val_loss, 'val_psnr': val_psnr_fine}
+        log = {'val/loss': val_loss, 'val/psnr': val_psnr_fine}
 
         img_gt = rgb_gt.squeeze(0).permute(2, 0, 1).cpu()  # (3, H, W)
         corse_rgb = corse_rgb.squeeze(0).permute(2, 0, 1).cpu()
@@ -162,8 +162,8 @@ class MipNeRFSystem(LightningModule):
         return log
 
     def validation_epoch_end(self, outputs):
-        mean_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        mean_psnr = torch.stack([x['val_psnr'] for x in outputs]).mean()
+        mean_loss = torch.stack([x['val/loss'] for x in outputs]).mean()
+        mean_psnr = torch.stack([x['val/psnr'] for x in outputs]).mean()
 
         self.log('val/loss', mean_loss)
         self.log('val/psnr', mean_psnr, prog_bar=True)
