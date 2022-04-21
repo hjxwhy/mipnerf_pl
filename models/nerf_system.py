@@ -6,6 +6,7 @@ from datasets import dataset_dict
 from datasets.multi_blender import Rays_keys, Rays
 from utils.lr_schedule import MipLRDecay
 from torch.utils.data import DataLoader
+from utils.vis import stack_rgb
 
 
 class MipNeRFSystem(LightningModule):
@@ -110,10 +111,34 @@ class MipNeRFSystem(LightningModule):
         return loss
 
     def validation_step(self, batch, batch_nb):
+        _, rgbs = batch
+        rgb_gt = rgbs[..., :3]
+        coarse_rgb, fine_rgb, val_mask = self.render_image(batch)
+
+        val_mse_corse = (val_mask * (coarse_rgb - rgb_gt) ** 2).sum() / val_mask.sum()
+        val_mse_fine = (val_mask * (fine_rgb - rgb_gt) ** 2).sum() / val_mask.sum()
+
+        val_loss = self.hparams['loss.coarse_loss_mult'] * val_mse_corse + val_mse_fine
+        val_psnr_corse = calc_psnr(coarse_rgb, rgb_gt)
+        val_psnr_fine = calc_psnr(fine_rgb, rgb_gt)
+
+        log = {'val/loss': val_loss, 'val/psnr': val_psnr_fine}
+        stack = stack_rgb(rgb_gt, coarse_rgb, fine_rgb)  # (3, 3, H, W)
+        self.logger.experiment.add_images('val/GT_coarse_fine',
+                                          stack, self.global_step)
+        return log
+
+    def validation_epoch_end(self, outputs):
+        mean_loss = torch.stack([x['val/loss'] for x in outputs]).mean()
+        mean_psnr = torch.stack([x['val/psnr'] for x in outputs]).mean()
+
+        self.log('val/loss', mean_loss)
+        self.log('val/psnr', mean_psnr, prog_bar=True)
+
+    def render_image(self, batch):
         rays, rgbs = batch
         _, height, width, _ = rgbs.shape  # N H W C
 
-        rgb_gt = rgbs[..., :3]
         # change Rays to list: [origins, directions, viewdirs, radii, lossmult, near, far]
         single_image_rays = [getattr(rays, key) for key in Rays_keys]
         val_mask = single_image_rays[-3]
@@ -143,27 +168,4 @@ class MipNeRFSystem(LightningModule):
 
         corse_rgb = corse_rgb.reshape(1, height, width, corse_rgb.shape[-1])  # N H W C
         fine_rgb = fine_rgb.reshape(1, height, width, fine_rgb.shape[-1])  # N H W C
-
-        val_mse_corse = (val_mask * (corse_rgb - rgb_gt) ** 2).sum() / val_mask.sum()
-        val_mse_fine = (val_mask * (fine_rgb - rgb_gt) ** 2).sum() / val_mask.sum()
-        val_loss = self.hparams['loss.coarse_loss_mult'] * val_mse_corse + val_mse_fine
-        val_psnr_corse = calc_psnr(corse_rgb, rgb_gt)
-        val_psnr_fine = calc_psnr(fine_rgb, rgb_gt)
-
-        log = {'val/loss': val_loss, 'val/psnr': val_psnr_fine}
-
-        img_gt = rgb_gt.squeeze(0).permute(2, 0, 1).cpu()  # (3, H, W)
-        corse_rgb = corse_rgb.squeeze(0).permute(2, 0, 1).cpu()
-        fine_rgb = fine_rgb.squeeze(0).permute(2, 0, 1).cpu()
-
-        stack = torch.stack([img_gt, corse_rgb, fine_rgb])  # (3, 3, H, W)
-        self.logger.experiment.add_images('val/GT_coarse_fine',
-                                          stack, self.global_step)
-        return log
-
-    def validation_epoch_end(self, outputs):
-        mean_loss = torch.stack([x['val/loss'] for x in outputs]).mean()
-        mean_psnr = torch.stack([x['val/psnr'] for x in outputs]).mean()
-
-        self.log('val/loss', mean_loss)
-        self.log('val/psnr', mean_psnr, prog_bar=True)
+        return corse_rgb, fine_rgb, val_mask

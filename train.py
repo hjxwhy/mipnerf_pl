@@ -22,10 +22,10 @@ def main(hparams):
     system = MipNeRFSystem(hparams)
     ckpt_cb = ModelCheckpoint(dirpath=os.path.join(hparams['out_dir'], 'ckpt', hparams['exp_name']),
                               filename='{epoch:03d}',
-                              monitor='val/psnr',
-                              mode='max',
-                              save_top_k=1,
-                              every_n_train_steps=hparams['val.check_interval'])
+                              # monitor='val/psnr',
+                              # mode='max',
+                              save_top_k=-1,
+                              every_n_train_steps=100000)
     pbar = TQDMProgressBar(refresh_rate=1)
     callbacks = [ckpt_cb, pbar]
 

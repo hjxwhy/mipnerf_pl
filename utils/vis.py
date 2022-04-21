@@ -213,6 +213,13 @@ def create_spheric_poses(radius, n_poses=120):
         spheric_poses += [spheric_pose(th, -np.pi / 5, radius)]  # 36 degree view downwards
     return np.stack(spheric_poses, 0)
 
+def stack_rgb(rgb_gt, coarse_rgb, fine_rgb):
+    img_gt = rgb_gt.squeeze(0).permute(2, 0, 1).cpu()  # (3, H, W)
+    coarse_rgb = coarse_rgb.squeeze(0).permute(2, 0, 1).cpu()
+    fine_rgb = fine_rgb.squeeze(0).permute(2, 0, 1).cpu()
+
+    stack = torch.stack([img_gt, coarse_rgb, fine_rgb])  # (3, 3, H, W)
+    return stack
 
 if __name__ == '__main__':
     # import numpy as np
