@@ -34,7 +34,7 @@ class MultiScaleCam(Dataset):
             else:
                 # for val and test phase, keep the image shape
                 assert batch_type == 'single_image', 'The batch_type can only be single_image without flatten'
-            self.cache_data()
+            # self.cache_data()
 
     def check_cache(self):
         if self.white_bkgd:
@@ -167,45 +167,14 @@ class MultiScaleCam(Dataset):
             raise NotImplementedError(f'{self.batch_type} batching strategy is not implemented.')
 
     def __getitem__(self, index):
-        # if self.batch_type == 'all_images':
-        #     # return Rays(*[self.rays[i][index] for i in range(len(self.rays))]), self.images[index]
-        #     return Rays(*[getattr(self.rays, key)[index] for key in Rays_keys]), self.images[index]
-        # elif self.batch_type == 'single_image':
-        #     raise NotImplementedError
-        #     # return Rays(*[getattr(self.rays, key)[index] for key in Rays_keys]), self.images[index]
-        # else:
-        #     raise NotImplementedError(f'{self.batch_type} batching strategy is not implemented.')
         rays = Rays(*[getattr(self.rays, key)[index] for key in Rays_keys])
         return rays, self.images[index]
 
 
 if __name__ == '__main__':
-    # with open(os.path.join('../lego', 'metadata.json'), 'r') as fp:
-    #     meta = json.load(fp)['train']
-    # meta = {k: np.array(meta[k]) for k in meta}
-    # # should now have ['pix2cam', 'cam2world', 'width', 'height'] in self.meta
-    # images = []
-    # for relative_path in meta['file_path'][:10]:
-    #     image_path = os.path.join('../lego', relative_path)
-    #     with open(image_path, 'rb') as image_file:
-    #         image = np.array(Image.open(image_file), dtype=np.float32) / 255.
-    #     if True:
-    #         # image = image[..., :3] * image[..., -1:] + (1. - image[..., -1:])
-    #         # pixels with alpha between 0 and 1 has a weird color!
-    #         mask = np.where(image[..., -1] > 1e-6, 1., 0.)[..., None]
-    #         image = image[..., :3] * mask + (1. - mask)
-    #     images.append(image[..., :3])
-    # images = images
-    # print(meta['pix2cam'].dtype)  # float64
-    # print(images[0].dtype)  # float64
-    # for name in Rays_keys:
-    #     print(np.load('lego/cache_train_white_all_images/'+name+'.npy').dtype)  # float32
-    # print(np.load('lego/cache_train_white_all_images/images.npy').dtype)  # float32
-    # print(np.load('lego/cache_train_white_all_images/images.npy').shape)  # float32
-
-    multicam = MultiScaleCam('/home/hjx/Documents/multi-blender/chair', 'val', batch_type='single_image')
-    from torch.utils.data import DataLoader
-    loader = DataLoader(multicam)
-    while True:
-        for iteration, batch in enumerate(loader):
-            print(iteration)
+    multicam = MultiScaleCam('/home/hjx/Documents/multi-blender/chair', 'train', batch_type='all_images')
+    # from torch.utils.data import DataLoader
+    # loader = DataLoader(multicam)
+    # while True:
+    #     for iteration, batch in enumerate(loader):
+    #         print(iteration)

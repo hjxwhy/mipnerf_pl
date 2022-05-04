@@ -33,7 +33,7 @@ def conical_frustum_to_gaussian(directions, t0, t1, base_radius, diagonal, stabl
     Assumes the ray is originating from the origin, and base_radius is the
     radius at dist=1. Doesn't assume `directions` is normalized.
     Args:
-        directions: jnp.float32 3-vector, the axis of the cone
+        directions: torch.tensor float32 3-vector, the axis of the cone
         t0: float, the starting distance of the frustum.
         t1: float, the ending distance of the frustum.
         base_radius: float, the scale of the radius as a function of distance.
@@ -309,9 +309,8 @@ def volumetric_rendering(rgb, density, t_samples, dirs, white_bkgd):
     """
     t_mids = 0.5 * (t_samples[..., :-1] + t_samples[..., 1:])
     t_interval = t_samples[..., 1:] - t_samples[..., :-1]  # [B, N]
-    # TODO: delta = t_interval?
     # models/mip.py:8 here sample point by multiply the interval with the direction without normalized, so
-    # the delta is normalize(t1*d-t2*d) = (t1-t2)*norm(d)
+    # the delta is norm(t1*d-t2*d) = (t1-t2)*norm(d)
     delta = t_interval * torch.linalg.norm(dirs[..., None, :], dim=-1)
     # Note that we're quietly turning density from [..., 0] to [...].
     density_delta = density[..., 0] * delta

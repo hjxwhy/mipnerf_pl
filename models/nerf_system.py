@@ -17,6 +17,7 @@ class MipNeRFSystem(LightningModule):
         self.val_randomized = hparams['val.randomized']
         self.white_bkgd = hparams['train.white_bkgd']
         self.val_chunk_size = hparams['val.chunk_size']
+        self.batch_size = self.hparams['train.batch_size']
         self.mip_nerf = MipNerf(
             num_samples=hparams['nerf.num_samples'],
             num_levels=hparams['nerf.num_levels'],
@@ -81,10 +82,10 @@ class MipNeRFSystem(LightningModule):
     def val_dataloader(self):
         # make the dataloader to an iter, so which can val n numbers images one time
         return iter(DataLoader(self.val_dataset,
-                          shuffle=False,
-                          num_workers=self.hparams['val.num_work'],
-                          batch_size=1,  # validate one image (H*W rays) at a time
-                          pin_memory=True))
+                               shuffle=False,
+                               num_workers=self.hparams['val.num_work'],
+                               batch_size=1,  # validate one image (H*W rays) at a time
+                               pin_memory=True))
 
     def training_step(self, batch, batch_nb):
         rays, rgbs = batch

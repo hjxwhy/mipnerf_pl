@@ -12,6 +12,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--out_dir", help="Output directory.", type=str, default='/home/hjx/Videos/3333')
 parser.add_argument("--config", help="Path to config file.", required=False,
                     default='/home/hjx/mipnerf_pl/configs/lego.yaml')
+# parser.add_argument('--exp_name', type=str, default='exp',
+#                     help='experiment name')
 # parser.add_argument("--pretrained", help="Path to pretrained ckpt.")
 # parser.add_argument("--rm_out_dir", action="store_true", help="Remove out dir. Not DDP save.")
 parser.add_argument("opts", nargs=argparse.REMAINDER,
