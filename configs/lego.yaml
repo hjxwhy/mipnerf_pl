@@ -1,10 +1,9 @@
 seed: 4
 num_gpus: 1
 dataset_name: 'blender'
-exp_name: 'chair'
+exp_name: 'lego'
 data:
-  path: '/media/hjx/dataset/nerf_synthetic/nerf_synthetic/chair'
-  name: 'blender'
+  path: '/media/hjx/dataset/nerf_synthetic/nerf_synthetic/lego'
 train:
   batch_size: 3072
   batch_type: 'all_images'  # single_image: inputs a full image; all_images: inputs batch_size rays sampled from different image
@@ -39,7 +38,6 @@ nerf:
   disable_integration: False  # If True, use PE instead of IPE.
   append_identity: Ture  # If True, append original view direction features
   mlp:
-    feature_dim: 96
     net_depth: 8  # The depth of the first part of MLP.
     net_width: 256  # The width of the first part of MLP.
     net_depth_condition: 1  # The depth of the second part of MLP.
@@ -59,6 +57,3 @@ loss:
   coarse_loss_mult: 0.1
 checkpoint:
   resume_path: None
-#  path: 'checkpoints'
-#  name: 'lego.pth'
-#  every_n_train_steps: 10000

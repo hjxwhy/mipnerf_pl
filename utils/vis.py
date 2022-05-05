@@ -1,5 +1,5 @@
 import torch
-# from visdom import Visdom
+import os
 import torchvision
 import torchvision.transforms as T
 import numpy as np
@@ -9,32 +9,6 @@ import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
 
 
-# def visualize_nerf_outputs(
-#     nerf_out: dict, viz: Visdom, visdom_env: str
-# ):
-#     """
-#     Visualizes the outputs of the `RadianceFieldRenderer`.
-#
-#     Args:
-#         nerf_out: An output of the validation rendering pass.
-#         viz: A visdom connection object.
-#         visdom_env: The name of visdom environment for visualization.
-#     """
-#
-#     # Show the coarse and fine renders together with the ground truth images.
-#     ims_full = torch.cat(
-#         [
-#             nerf_out[imvar][0].permute(2, 0, 1).detach().cpu().clamp(0.0, 1.0)
-#             for imvar in ("rgb_coarse", "rgb_fine", "rgb_gt")
-#         ],
-#         dim=2,
-#     )
-#     viz.image(
-#         ims_full,
-#         env=visdom_env,
-#         win="images_full",
-#         opts={"title": "coarse | fine | target"},
-#     )
 def normalize(v):
     """Normalize a vector."""
     return v / np.linalg.norm(v)
@@ -81,8 +55,7 @@ def save_image_tensor(image: torch.tensor, height: int, width: int, save_path: s
             image = image.permute(0, 3, 1, 2)
         torchvision.utils.save_image(image, save_path)
     elif image.dim() == 2:  # flatten
-        assert image.shape[0] == height * width
-        image = image.reshape(1, height, width, image.shape[-1])
+        image = image.reshape(1, height, width, 1)
         if nhwc:  # nhwc -> nchw
             image = image.permute(0, 3, 1, 2)
         torchvision.utils.save_image(image, save_path)
@@ -90,11 +63,22 @@ def save_image_tensor(image: torch.tensor, height: int, width: int, save_path: s
         raise NotImplementedError
 
 
+def save_images(rgb, dist, acc, path, idx):
+    B, H, W, C = rgb.shape
+    color_dist = visualize_depth(dist)
+    color_acc = visualize_depth(acc)
+    save_image_tensor(rgb, H, W, os.path.join(path, str(idx) + '_rgb' + '.png'))
+    save_image_tensor(color_dist, H, W, os.path.join(path, str(idx) + '_dist' + '.png'), False)
+    save_image_tensor(color_acc, H, W, os.path.join(path, str(idx) + '_acc' + '.png'), False)
+
+
 def visualize_depth(depth, cmap=cv2.COLORMAP_JET):
     """
     depth: (H, W)
     """
     x = depth.cpu().numpy()
+    if len(x.shape) > 2:
+        x = np.squeeze(x)
     x = np.nan_to_num(x)  # change nan to 0
     mi = np.min(x)  # get minimum depth
     ma = np.max(x)
@@ -213,6 +197,7 @@ def create_spheric_poses(radius, n_poses=120):
         spheric_poses += [spheric_pose(th, -np.pi / 5, radius)]  # 36 degree view downwards
     return np.stack(spheric_poses, 0)
 
+
 def stack_rgb(rgb_gt, coarse_rgb, fine_rgb):
     img_gt = rgb_gt.squeeze(0).permute(2, 0, 1).cpu()  # (3, H, W)
     coarse_rgb = coarse_rgb.squeeze(0).permute(2, 0, 1).cpu()
@@ -220,6 +205,7 @@ def stack_rgb(rgb_gt, coarse_rgb, fine_rgb):
 
     stack = torch.stack([img_gt, coarse_rgb, fine_rgb])  # (3, 3, H, W)
     return stack
+
 
 if __name__ == '__main__':
     # import numpy as np

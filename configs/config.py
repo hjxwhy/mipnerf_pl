@@ -86,7 +86,7 @@ def parse_args(parser: argparse.ArgumentParser) -> Tuple[str, dict, str, argpars
         merge_from_list(config, args.opts)
     args_dict = args.__dict__
     for k, v in args_dict.items():
-        # if not k in config:
+        if not k in config:
             config[k] = v
     return config
 

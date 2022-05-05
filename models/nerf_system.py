@@ -1,9 +1,10 @@
 import torch
 from pytorch_lightning import LightningModule
 from models.mip_nerf import MipNerf
-from utils.loss import calc_mse, calc_psnr
+from models.mip import rearrange_render_image
+from utils.metrics import calc_psnr
 from datasets import dataset_dict
-from datasets.multi_blender import Rays_keys, Rays
+
 from utils.lr_schedule import MipLRDecay
 from torch.utils.data import DataLoader
 from utils.vis import stack_rgb
@@ -139,34 +140,17 @@ class MipNeRFSystem(LightningModule):
     def render_image(self, batch):
         rays, rgbs = batch
         _, height, width, _ = rgbs.shape  # N H W C
-
-        # change Rays to list: [origins, directions, viewdirs, radii, lossmult, near, far]
-        single_image_rays = [getattr(rays, key) for key in Rays_keys]
-        val_mask = single_image_rays[-3]
-
-        # flatten each Rays attribute and put on device
-        single_image_rays = [rays_attr.reshape(-1, rays_attr.shape[-1]) for rays_attr in single_image_rays]
-        # get the amount of full rays of an image
-        length = single_image_rays[0].shape[0]
-        # divide each Rays attr into N groups according to chunk_size,
-        # the length of the last group <= chunk_size
-        single_image_rays = [[rays_attr[i:i + self.val_chunk_size] for i in range(0, length, self.val_chunk_size)] for
-                             rays_attr in single_image_rays]
-        # get N, the N for each Rays attr is the same
-        length = len(single_image_rays[0])
-        # generate N Rays instances
-        single_image_rays = [Rays(*[rays_attr[i] for rays_attr in single_image_rays]) for i in range(length)]
-
-        corse_rgb, fine_rgb = [], []
+        single_image_rays, val_mask = rearrange_render_image(rays, self.val_chunk_size)
+        coarse_rgb, fine_rgb = [], []
         with torch.no_grad():
             for batch_rays in single_image_rays:
                 (c_rgb, _, _), (f_rgb, _, _) = self(batch_rays, self.val_randomized, self.white_bkgd)
-                corse_rgb.append(c_rgb)
+                coarse_rgb.append(c_rgb)
                 fine_rgb.append(f_rgb)
 
-        corse_rgb = torch.cat(corse_rgb, dim=0)
+        coarse_rgb = torch.cat(coarse_rgb, dim=0)
         fine_rgb = torch.cat(fine_rgb, dim=0)
 
-        corse_rgb = corse_rgb.reshape(1, height, width, corse_rgb.shape[-1])  # N H W C
+        coarse_rgb = coarse_rgb.reshape(1, height, width, coarse_rgb.shape[-1])  # N H W C
         fine_rgb = fine_rgb.reshape(1, height, width, fine_rgb.shape[-1])  # N H W C
-        return corse_rgb, fine_rgb, val_mask
+        return coarse_rgb, fine_rgb, val_mask
