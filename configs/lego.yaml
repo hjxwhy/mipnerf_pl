@@ -1,9 +1,10 @@
 seed: 4
 num_gpus: 1
-dataset_name: 'blender'
+dataset_name: 'multi_blender'
 exp_name: 'lego'
 data:
-  path: '/media/hjx/dataset/nerf_synthetic/nerf_synthetic/lego'
+#  path: '/media/hjx/dataset/nerf_synthetic/nerf_synthetic/lego'
+  path: '/home/hjx/Documents/multi-blender/chair'
 train:
   batch_size: 3072
   batch_type: 'all_images'  # single_image: inputs a full image; all_images: inputs batch_size rays sampled from different image

@@ -1,5 +1,4 @@
-from .multi_blender import MultiScaleCam
-from .datasets import Blender
+from .datasets import Blender, Multicam
 dataset_dict = {
     'blender': Blender,
-    'multi_blender': MultiScaleCam}
+    'multi_blender': Multicam}

@@ -28,7 +28,7 @@ def main(args):
                                                                split='test',
                                                                white_bkgd=hparams['val.white_bkgd'],
                                                                batch_type=hparams['val.batch_type'],
-                                                               factor=2
+                                                               # factor=2
                                                                )
 
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4, pin_memory=True)

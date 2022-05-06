@@ -117,11 +117,11 @@ class MipNeRFSystem(LightningModule):
         rgb_gt = rgbs[..., :3]
         coarse_rgb, fine_rgb, val_mask = self.render_image(batch)
 
-        val_mse_corse = (val_mask * (coarse_rgb - rgb_gt) ** 2).sum() / val_mask.sum()
+        val_mse_coarse = (val_mask * (coarse_rgb - rgb_gt) ** 2).sum() / val_mask.sum()
         val_mse_fine = (val_mask * (fine_rgb - rgb_gt) ** 2).sum() / val_mask.sum()
 
-        val_loss = self.hparams['loss.coarse_loss_mult'] * val_mse_corse + val_mse_fine
-        val_psnr_corse = calc_psnr(coarse_rgb, rgb_gt)
+        val_loss = self.hparams['loss.coarse_loss_mult'] * val_mse_coarse + val_mse_fine
+
         val_psnr_fine = calc_psnr(fine_rgb, rgb_gt)
 
         log = {'val/loss': val_loss, 'val/psnr': val_psnr_fine}

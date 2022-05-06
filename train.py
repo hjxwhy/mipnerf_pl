@@ -1,6 +1,6 @@
 from models.nerf_system import MipNeRFSystem
 # pytorch-lightning
-from pytorch_lightning import LightningModule, Trainer
+from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.plugins import DDPPlugin
@@ -12,11 +12,8 @@ import numpy as np
 import random
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--out_dir", help="Output directory.", type=str, default='/home/hjx/Videos/3333')
-parser.add_argument("--config", help="Path to config file.", required=False,
-                    default='/home/hjx/mipnerf_pl/configs/lego.yaml')
-# parser.add_argument("--pretrained", help="Path to pretrained ckpt.")
-# parser.add_argument("--rm_out_dir", action="store_true", help="Remove out dir. Not DDP save.")
+parser.add_argument("--out_dir", help="Output directory.", type=str, required=True)
+parser.add_argument("--config", help="Path to config file.", required=False, default='./configs/lego.yaml')
 parser.add_argument("opts", nargs=argparse.REMAINDER,
                     help="Modify hparams. Example: train.py resume out_dir TRAIN.BATCH_SIZE 2")
 
@@ -37,7 +34,8 @@ def main(hparams):
                               monitor='val/psnr',
                               mode='max',
                               save_top_k=2,
-                              every_n_train_steps=10000)
+                              # every_n_train_steps=10000
+                              )
     pbar = TQDMProgressBar(refresh_rate=1)
     callbacks = [ckpt_cb, pbar]
 
@@ -51,7 +49,6 @@ def main(hparams):
         max_epochs=-1,
         callbacks=callbacks,
         val_check_interval=hparams['val.check_interval'],
-        resume_from_checkpoint=hparams['checkpoint.resume_path'],
         logger=logger,
         enable_model_summary=False,
         accelerator='auto',
@@ -63,7 +60,7 @@ def main(hparams):
         limit_val_batches=hparams['val.sample_num']
     )
 
-    trainer.fit(system)
+    trainer.fit(system, ckpt_path=hparams['checkpoint.resume_path'])
 
 
 if __name__ == "__main__":

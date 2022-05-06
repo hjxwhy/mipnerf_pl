@@ -164,9 +164,9 @@ class Multicam(BaseDataset):
         xy = [res2grid(w, h) for w, h in zip(width, height)]
         pixel_dirs = [np.stack([x, y, np.ones_like(x)], axis=-1) for x, y in xy]
         camera_dirs = [v @ p2c[:3, :3].T for v, p2c in zip(pixel_dirs, pix2cam)]
-        directions = [v @ c2w[:3, :3].T for v, c2w in zip(camera_dirs, cam2world)]
+        directions = [(v @ c2w[:3, :3].T).copy() for v, c2w in zip(camera_dirs, cam2world)]
         origins = [
-            np.broadcast_to(c2w[:3, -1], v.shape)
+            np.broadcast_to(c2w[:3, -1], v.shape).copy()
             for v, c2w in zip(directions, cam2world)
         ]
         viewdirs = [
@@ -179,9 +179,9 @@ class Multicam(BaseDataset):
                 for i in range(len(self.images))
             ]
 
-        lossmult = broadcast_scalar_attribute(self.meta['lossmult'])
-        near = broadcast_scalar_attribute(self.meta['near'])
-        far = broadcast_scalar_attribute(self.meta['far'])
+        lossmult = broadcast_scalar_attribute(self.meta['lossmult']).copy()
+        near = broadcast_scalar_attribute(self.meta['near']).copy()
+        far = broadcast_scalar_attribute(self.meta['far']).copy()
 
         # Distance from each unit-norm direction vector to its x-axis neighbor.
         dx = [
