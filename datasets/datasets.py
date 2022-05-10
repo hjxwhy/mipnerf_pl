@@ -33,6 +33,8 @@ class BaseDataset(Dataset):
         self.batch_type = batch_type
         self.images = None
         self.rays = None
+        self.it = -1
+        self.n_examples = 1
 
     def _flatten(self, x):
         # Always flatten out the height x width dimensions
@@ -60,7 +62,6 @@ class BaseDataset(Dataset):
     def _val_init(self):
         self._load_renderings()
         self._generate_rays()
-        self.it = 0
 
     def _generate_rays(self):
         """Generating rays for all images."""
@@ -69,51 +70,13 @@ class BaseDataset(Dataset):
     def _load_renderings(self):
         raise ValueError('Implement in different dataset.')
 
-    def check_cache(self):
-        if self.white_bkgd:
-            bkgd = 'white'
-        else:
-            bkgd = 'black'
-        cache_path = os.path.join(self.data_dir, '_'.join(['cache', self.split, bkgd, self.batch_type]))
-        if os.path.exists(cache_path):
-            print('loading cached {} data'.format(self.split))
-            if self.batch_type == 'single_image':
-                self.images = np.load(os.path.join(cache_path, 'images.npy'), allow_pickle=True).tolist()
-                self.rays = Rays(*[np.load(os.path.join(cache_path, name + '.npy'), allow_pickle=True).tolist()
-                                   for name in Rays_keys])
-
-            elif self.batch_type == 'all_images':
-                self.images = np.load(os.path.join(cache_path, 'images.npy'))
-                self.rays = Rays(*[np.load(os.path.join(cache_path, name + '.npy')) for name in Rays_keys])
-            else:
-                raise NotImplementedError
-            return True
-        else:
-            print('cached {} data not found, regenerate cache data'.format(self.split))
-            return False
-
-    def cache_data(self):
-        if self.white_bkgd:
-            bkgd = 'white'
-        else:
-            bkgd = 'black'
-        cache_path = os.path.join(self.data_dir, '_'.join(['cache', self.split, bkgd, self.batch_type]))
-        assert not os.path.exists(cache_path)
-        os.mkdir(cache_path)
-        if self.batch_type == 'single_image':
-            np.save(os.path.join(cache_path, 'images'), np.array(self.images, dtype=object))
-            [np.save(os.path.join(cache_path, name), np.array(getattr(self.rays, name), dtype=object)) for name in
-             Rays_keys]
-        elif self.batch_type == 'all_images':
-            np.save(os.path.join(cache_path, 'images'), self.images)
-            [np.save(os.path.join(cache_path, name), getattr(self.rays, name)) for name in Rays_keys]
-        else:
-            raise NotImplementedError
-
     def __len__(self):
         return len(self.images)
 
     def __getitem__(self, index):
+        if self.split == 'val':
+            index = (self.it + 1) % self.n_examples
+            self.it += 1
         rays = Rays(*[getattr(self.rays, key)[index] for key in Rays_keys])
         return rays, self.images[index]
 
@@ -297,19 +260,3 @@ class Blender(BaseDataset):
             near=nears,
             far=fars)
         del origins, directions, viewdirs, radii, lossmults, nears, fars, camera_dirs
-
-
-if __name__ == '__main__':
-    # data_dir = '/home/hjx/Documents/multi-blender/chair'
-    data_dir = '/media/hjx/dataset/nerf_synthetic/nerf_synthetic/chair'
-    # multicam = Multicam(data_dir, split='val', batch_type='single_image')
-    # multicam = Multicam(data_dir)
-    multicam = Blender(data_dir)
-    # multicam = Blender(data_dir, split='val', batch_type='single_image')
-
-    from torch.utils.data import DataLoader
-
-    loader = DataLoader(multicam, batch_size=4096)
-    while True:
-        for iteration, batch in enumerate(loader):
-            print(batch[0].origins.shape)

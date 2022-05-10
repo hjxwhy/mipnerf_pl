@@ -21,6 +21,7 @@ class MipLRDecay(torch.optim.lr_scheduler._LRScheduler):
     Returns:
         lr: the learning for current step 'step'.
     """
+
     def __init__(self, optimizer,
                  lr_init: float,
                  lr_final: float,
@@ -33,7 +34,6 @@ class MipLRDecay(torch.optim.lr_scheduler._LRScheduler):
         self.lr_delay_steps = lr_delay_steps
         self.lr_delay_mult = lr_delay_mult
         super(MipLRDecay, self).__init__(optimizer)
-
 
     # def step(self, optimizer, step):
     #     if self.lr_delay_steps > 0:
@@ -58,5 +58,3 @@ class MipLRDecay(torch.optim.lr_scheduler._LRScheduler):
         t = np.clip(self.last_epoch / self.max_steps, 0, 1)
         log_lerp = np.exp(np.log(self.lr_init) * (1 - t) + np.log(self.lr_final) * t)
         return [delay_rate * log_lerp]
-        # for param_group in optimizer.param_groups:
-        #     param_group['lr'] = delay_rate * log_lerp

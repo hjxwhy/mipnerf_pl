@@ -195,10 +195,3 @@ def eval_errors(pred_color: torch.Tensor, batch_pixels: torch.Tensor):
         batch_pixels = batch_pixels.permute(0, 3, 1, 2)
     ssim_val = ssim(pred_color, batch_pixels, window_size=11, reduction='mean')
     return psnr_val, ssim_val
-
-
-if __name__ == '__main__':
-    img0 = torch.rand(1, 3, 64, 64).float()  # image should be RGB, IMPORTANT: normalized to [-1,1]
-    img1 = img0 * 0.9
-    d = ssim(img0, img1, 11, reduction='mean')
-    print(d)

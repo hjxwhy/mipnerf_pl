@@ -1,7 +1,7 @@
 import torch
 from einops import rearrange
 import numpy as np
-from datasets.multi_blender import Rays_keys, Rays
+from datasets.datasets import Rays_keys, Rays
 
 
 def lift_gaussian(directions, t_mean, t_var, r_var, diagonal):

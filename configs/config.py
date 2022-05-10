@@ -1,3 +1,4 @@
+# this file is modified from tandem https://github.com/tum-vision/tandem
 import yaml
 import argparse
 import os
@@ -89,9 +90,3 @@ def parse_args(parser: argparse.ArgumentParser) -> Tuple[str, dict, str, argpars
         if not k in config:
             config[k] = v
     return config
-
-
-# parser = argparse.ArgumentParser()
-# parser.add_argument("--config", help="Path to config file.", default='/home/hjx/mipnerf_pl/configs/lego.yaml')
-# cfg = parse_args(parser)
-# print(cfg)

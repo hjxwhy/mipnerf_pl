@@ -67,9 +67,9 @@ def save_images(rgb, dist, acc, path, idx):
     B, H, W, C = rgb.shape
     color_dist = visualize_depth(dist)
     color_acc = visualize_depth(acc)
-    save_image_tensor(rgb, H, W, os.path.join(path, str(idx) + '_rgb' + '.png'))
-    save_image_tensor(color_dist, H, W, os.path.join(path, str(idx) + '_dist' + '.png'), False)
-    save_image_tensor(color_acc, H, W, os.path.join(path, str(idx) + '_acc' + '.png'), False)
+    save_image_tensor(rgb, H, W, os.path.join(path, str('{:05d}'.format(idx)) + '_rgb' + '.png'))
+    save_image_tensor(color_dist, H, W, os.path.join(path, str('{:05d}'.format(idx)) + '_dist' + '.png'), False)
+    save_image_tensor(color_acc, H, W, os.path.join(path, str('{:05d}'.format(idx)) + '_acc' + '.png'), False)
 
 
 def visualize_depth(depth, cmap=cv2.COLORMAP_JET):
@@ -205,20 +205,3 @@ def stack_rgb(rgb_gt, coarse_rgb, fine_rgb):
 
     stack = torch.stack([img_gt, coarse_rgb, fine_rgb])  # (3, 3, H, W)
     return stack
-
-
-if __name__ == '__main__':
-    # import numpy as np
-    # from PIL import Image
-    # image_path = 'temp/000_d0.png'
-    # with open(image_path, 'rb') as image_file:
-    #     image = np.array(Image.open(image_file), dtype=np.float32) / 255.
-    # print(image.shape)
-    # image_tensor = torch.from_numpy(image)[None, ...]
-    # print(image_tensor.shape)
-    # image_tensor = image_tensor.permute(0, 3, 1, 2)
-    # print(image_tensor.shape)
-    # torchvision.utils.save_image(image_tensor, 'test.png')
-    # image_o = image = np.array(Image.open('test.png'), dtype=np.float32) / 255.
-    # print(np.sum((image_o-image)**2))
-    lr = vis_lr(max_steps=2000000)

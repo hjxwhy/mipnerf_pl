@@ -233,7 +233,7 @@ class MipNerf(torch.nn.Module):
                 raw_density += self.density_noise * torch.randn(raw_density.shape, dtype=raw_density.dtype)
 
             # Volumetric rendering.
-            rgb = self.rgb_activation(raw_rgb) # [B, N, 3]
+            rgb = self.rgb_activation(raw_rgb)  # [B, N, 3]
             rgb = rgb * (1 + 2 * self.rgb_padding) - self.rgb_padding
             density = self.density_activation(raw_density + self.density_bias)  # [B, N, 1]
             comp_rgb, distance, acc, weights = volumetric_rendering(
@@ -246,24 +246,3 @@ class MipNerf(torch.nn.Module):
             ret.append((comp_rgb, distance, acc))
 
         return ret
-
-
-if __name__ == '__main__':
-    # mlp = MLP(8, 256, 2, 128, 4, 3, 1, 'relu', 96, 27)
-    # xyz_feature = torch.randn((2, 128, 96))
-    # view_feature = torch.randn((2, 27))
-    # out = mlp(xyz_feature, view_feature)
-    # print(out[0].shape, out[1].shape)
-
-    import collections
-
-    Rays = collections.namedtuple(
-        'Rays',
-        ('origins', 'directions', 'viewdirs', 'radii', 'lossmult', 'near', 'far'))
-    randn3 = torch.randn(64, 3)
-    randn1 = torch.randn(64, 1)
-    rayss = Rays(*([randn3] * 3), *([randn1] * 4))
-    model = MipNerf(128, 2, 0., True, True, False, 'cone', 0, 16, 4, 'softplus', 0., -1., 'sigmoid', 0.001, False, True,
-                    8, 256, 2, 128, 4, 3, 1, 'relu')
-    out = model(rayss, True, True)
-    print(out)

@@ -55,12 +55,12 @@ class MipNeRFSystem(LightningModule):
     def setup(self, stage):
         dataset = dataset_dict[self.hparams['dataset_name']]
 
-        self.train_dataset = dataset(data_dir=self.hparams['data.path'],
+        self.train_dataset = dataset(data_dir=self.hparams['data_path'],
                                      split='train',
                                      white_bkgd=self.hparams['train.white_bkgd'],
                                      batch_type=self.hparams['train.batch_type'],
                                      )
-        self.val_dataset = dataset(data_dir=self.hparams['data.path'],
+        self.val_dataset = dataset(data_dir=self.hparams['data_path'],
                                    split='val',
                                    white_bkgd=self.hparams['val.white_bkgd'],
                                    batch_type=self.hparams['val.batch_type']
@@ -81,12 +81,13 @@ class MipNeRFSystem(LightningModule):
                           pin_memory=True)
 
     def val_dataloader(self):
-        # make the dataloader to an iter, so which can val n numbers images one time
-        return iter(DataLoader(self.val_dataset,
-                               shuffle=False,
-                               num_workers=self.hparams['val.num_work'],
-                               batch_size=1,  # validate one image (H*W rays) at a time
-                               pin_memory=True))
+        # must give 1 worker
+        return DataLoader(self.val_dataset,
+                          shuffle=False,
+                          num_workers=1,
+                          batch_size=1,  # validate one image (H*W rays) at a time
+                          pin_memory=True,
+                          persistent_workers=True)
 
     def training_step(self, batch, batch_nb):
         rays, rgbs = batch

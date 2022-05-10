@@ -12,7 +12,10 @@ import numpy as np
 import random
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--data_path", help="data path.", type=str, required=True)
 parser.add_argument("--out_dir", help="Output directory.", type=str, required=True)
+parser.add_argument("--dataset_name", help="Single or multi data.", type=str, choices=['multi_blender', 'blender'],
+                    required=True)
 parser.add_argument("--config", help="Path to config file.", required=False, default='./configs/lego.yaml')
 parser.add_argument("opts", nargs=argparse.REMAINDER,
                     help="Modify hparams. Example: train.py resume out_dir TRAIN.BATCH_SIZE 2")
@@ -30,11 +33,10 @@ def main(hparams):
     setup_seed(hparams['seed'])
     system = MipNeRFSystem(hparams)
     ckpt_cb = ModelCheckpoint(dirpath=os.path.join(hparams['out_dir'], 'ckpt', hparams['exp_name']),
-                              # filename='{epoch:03d}',
+                              save_last=True,
                               monitor='val/psnr',
                               mode='max',
                               save_top_k=2,
-                              # every_n_train_steps=10000
                               )
     pbar = TQDMProgressBar(refresh_rate=1)
     callbacks = [ckpt_cb, pbar]
@@ -44,7 +46,6 @@ def main(hparams):
                                default_hp_metric=False)
 
     trainer = Trainer(
-        gradient_clip_algorithm='norm',
         max_steps=hparams['optimizer.max_steps'],
         max_epochs=-1,
         callbacks=callbacks,

@@ -1,3 +1,4 @@
+# This file is modified from official mipnerf
 import json
 import os
 import argparse
@@ -118,11 +119,10 @@ def convert_to_nerfdata(basedir, newdir, n_down):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--blender_dir", help="data root path", type=str,
-                        default='/media/hjx/dataset/nerf_synthetic/nerf_synthetic/')
+    parser.add_argument("--blender_dir", help="data root path", type=str,)
     parser.add_argument("--object_name", help="While object you want to make multi scale", type=str,
-                        default="lego")
-    parser.add_argument("--out_dir", help="Output directory.", type=str, default="/home/hjx/Documents/multi-blender")
+                        default=None)
+    parser.add_argument("--out_dir", help="Output directory.", type=str)
     parser.add_argument("--n_down", help="Numbers of scale you want to scale.", type=int, default=4)
     args = parser.parse_args()
     blenderdir = args.blender_dir
@@ -130,8 +130,10 @@ def main():
     n_down = args.n_down
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-
-    dirs = [os.path.join(blenderdir, f) for f in os.listdir(blenderdir)]
+    scenes = os.listdir(blenderdir)
+    if args.object_name is not None:
+        scenes = [args.object_name]
+    dirs = [os.path.join(blenderdir, f) for f in scenes]
     dirs = [d for d in dirs if os.path.isdir(d)]
     print(dirs)
     for basedir in dirs:
