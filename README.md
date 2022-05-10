@@ -3,17 +3,6 @@ Unofficial pytorch-lightning implement of [Mip-NeRF](https://jonbarron.info/mipn
 
 [![Multi-scale render result](https://res.cloudinary.com/marcomontalbano/image/upload/v1652148920/video_to_markdown/images/youtube--3MxfZVUOIps-c05b58ac6eb4c4700831b2b3070cd403.jpg)](https://youtu.be/3MxfZVUOIps "Multi-scale render result")
 
-<style type="text/css">
-.tg  {border-collapse:collapse;border-spacing:0;}
-.tg td{border-color:black;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;
-  overflow:hidden;padding:10px 5px;word-break:normal;}
-.tg th{border-color:black;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;
-  font-weight:normal;overflow:hidden;padding:10px 5px;word-break:normal;}
-.tg .tg-baqh{text-align:center;vertical-align:top}
-.tg .tg-c3ow{border-color:inherit;text-align:center;vertical-align:top}
-.tg .tg-0lax{text-align:left;vertical-align:top}
-.tg .tg-0pky{border-color:inherit;text-align:left;vertical-align:top}
-</style>
 <table class="tg">
 <thead>
   <tr>
@@ -137,9 +126,10 @@ python render_video.py --gen_video_only --render_images_dir IMG_DIR_RENDER
 
 The script modified from [nerfplusplus](https://github.com/Kai-46/nerfplusplus) supports visualize all poses which have been reorganized to right-down-forward coordinate. Multi-scale have different camera focal length which is equivalent to different resolutions.
 
-<img src="media/single-scale.png" style="zoom:50%;" /><img src="media/multi-scale.png" style="zoom:50%;" />
 
 
+
+<img src="media/single-scale.png" width="42%"/><img src="media/multi-scale.png" width="48%"/>
 
 
 ## Citation
