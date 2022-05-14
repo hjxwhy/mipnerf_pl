@@ -2,6 +2,7 @@ import torch
 from einops import rearrange
 import numpy as np
 from datasets.datasets import Rays_keys, Rays
+from functorch import jacrev, vmap
 
 
 def lift_gaussian(directions, t_mean, t_var, r_var, diagonal):
@@ -88,7 +89,8 @@ def cast_rays(t_samples, origins, directions, radii, ray_shape, diagonal=True):
     return means, covs
 
 
-def sample_along_rays(origins, directions, radii, num_samples, near, far, randomized, disparity, ray_shape):
+def sample_along_rays(origins, directions, radii, num_samples, near, far, randomized, disparity, ray_shape,
+                      sample_360=False):
     """
     Stratified sampling along the rays.
     Args:
@@ -109,11 +111,17 @@ def sample_along_rays(origins, directions, radii, num_samples, near, far, random
     batch_size = origins.shape[0]
 
     t_samples = torch.linspace(0., 1., num_samples + 1, device=origins.device)
-    if disparity:
-        t_samples = 1. / (1. / near * (1. - t_samples) + 1. / far * t_samples)
+    if not sample_360:
+        if disparity:
+            t_samples = 1. / (1. / near * (1. - t_samples) + 1. / far * t_samples)
+        else:
+            # t_samples = near * (1. - t_samples) + far * t_samples
+            t_samples = near + (far - near) * t_samples
     else:
-        # t_samples = near * (1. - t_samples) + far * t_samples
-        t_samples = near + (far - near) * t_samples
+        far_inv = 1 / far
+        near_inv = 1 / near
+        t_samples = far_inv * t_samples + (1 - t_samples) * near_inv
+        t_samples = 1 / t_samples
 
     if randomized:
         mids = 0.5 * (t_samples[..., 1:] + t_samples[..., :-1])
@@ -124,7 +132,7 @@ def sample_along_rays(origins, directions, radii, num_samples, near, far, random
     else:
         # Broadcast t_samples to make the returned shape consistent.
         t_samples = torch.broadcast_to(t_samples, [batch_size, num_samples + 1])
-    means, covs = cast_rays(t_samples, origins, directions, radii, ray_shape)
+    means, covs = cast_rays(t_samples, origins, directions, radii, ray_shape, not sample_360)
     return t_samples, (means, covs)
 
 
@@ -253,6 +261,36 @@ def expected_sin(x, x_var):
     return y, y_var
 
 
+def integrated_pos_enc_360(means_covs):
+    P = torch.tensor([[0.8506508, 0, 0.5257311],
+                      [0.809017, 0.5, 0.309017],
+                      [0.5257311, 0.8506508, 0],
+                      [1, 0, 0],
+                      [0.809017, 0.5, -0.309017],
+                      [0.8506508, 0, -0.5257311],
+                      [0.309017, 0.809017, -0.5],
+                      [0, 0.5257311, -0.8506508],
+                      [0.5, 0.309017, -0.809017],
+                      [0, 1, 0],
+                      [-0.5257311, 0.8506508, 0],
+                      [-0.309017, 0.809017, -0.5],
+                      [0, 0.5257311, 0.8506508],
+                      [-0.309017, 0.809017, 0.5],
+                      [0.309017, 0.809017, 0.5],
+                      [0.5, 0.309017, 0.809017],
+                      [0.5, -0.309017, 0.809017],
+                      [0, 0, 1],
+                      [-0.5, 0.309017, 0.809017],
+                      [-0.809017, 0.5, 0.309017],
+                      [-0.809017, 0.5, -0.309017]]).T
+    means, covs = means_covs
+    P = P.to(means.device)
+    means, x_cov = parameterization(means, covs)
+    y = torch.matmul(means, P)
+    y_var = torch.sum((torch.matmul(x_cov, P)) * P, -2)
+    return expected_sin(torch.cat([y, y + 0.5 * torch.tensor(np.pi)], dim=-1), torch.cat([y_var] * 2, dim=-1))[0]
+
+
 def integrated_pos_enc(means_covs, min_deg, max_deg, diagonal=True):
     """Encode `means` with sinusoids scaled by 2^[min_deg:max_deg-1].
     Args:
@@ -353,3 +391,51 @@ def rearrange_render_image(rays, chunk_size=4096):
     # generate N Rays instances
     single_image_rays = [Rays(*[rays_attr[i] for rays_attr in single_image_rays]) for i in range(length)]
     return single_image_rays, val_mask
+
+
+def contract(x):
+    # x: [N, 3]
+    return (2 - 1 / (torch.norm(x, dim=-1, keepdim=True))) * x / torch.norm(x, dim=-1, keepdim=True)
+
+
+def parameterization(means, covs):
+    '''
+    means: [B, N, 3]
+    covs: [B, N, 3, 3]
+    '''
+    contr_mask = (torch.norm(means, dim=-1) > 1).detach()
+    contr_means = means[contr_mask]
+    contr_covs = covs[contr_mask]
+    means_clone = torch.clone(means)
+    covs_clone = torch.clone(covs)
+    with torch.no_grad():
+        jac = vmap(jacrev(contract))(contr_means)
+    contr_covs = jac @ contr_covs @ jac.permute([0, 2, 1])
+    means_clone[contr_mask] = contract(contr_means)
+    covs_clone[contr_mask] = contr_covs
+    return means_clone, covs_clone
+
+
+if __name__ == '__main__':
+    torch.manual_seed(0)
+    batch_size = 4096
+    origins = torch.rand([batch_size, 3])
+    directions = torch.rand(batch_size, 3)
+    radii = torch.rand([batch_size, 1])
+    num_samples = 64
+    near = torch.rand([batch_size, 1])
+    far = torch.rand([batch_size, 1])
+    randomized = True
+    disparity = False
+    ray_shape = 'cone'
+
+    means = torch.rand(4096, 32, 3, requires_grad=True)
+    convs = torch.rand(4096, 32, 3, 3, requires_grad=True)
+    # print(s.shape)
+    ss = sample_along_rays(origins, directions, radii, num_samples, near, far, randomized, disparity, ray_shape, True)
+    print(ss[0].shape, ss[1][0].shape, ss[1][1].shape)
+    s = integrated_pos_enc_360(ss[1])
+    print(s.shape)
+    # ss = mipnerf360_scale(means, 0, 2)
+    # print(s)
+    # print(jac)

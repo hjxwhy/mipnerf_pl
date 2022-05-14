@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 import os
 import argparse
-from vis import create_spheric_poses
+from utils.vis import create_spheric_poses
 
 np.random.seed(11)
 
