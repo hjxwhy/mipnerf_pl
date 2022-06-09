@@ -81,9 +81,9 @@ Download the datasets from the [NeRF official Google Drive](https://drive.google
 
 ```
 # Generate all scenes
-python datasets/convert_blender_data.py --blenderdir UZIP_DATA_DIR --outdir OUT_DATA_DIR
+python datasets/convert_blender_data.py --blender_dir UZIP_DATA_DIR --out_dir OUT_DATA_DIR
 # If you only want to generate a scene, you can:
-python datasets/convert_blender_data.py --blenderdir UZIP_DATA_DIR --outdir OUT_DATA_DIR --object_name lego
+python datasets/convert_blender_data.py --blender_dir UZIP_DATA_DIR --out_dir OUT_DATA_DIR --object_name lego
 ```
 ## Running
 ### Train

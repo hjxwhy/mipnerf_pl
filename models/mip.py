@@ -89,8 +89,28 @@ def cast_rays(t_samples, origins, directions, radii, ray_shape, diagonal=True):
     return means, covs
 
 
-def sample_along_rays(origins, directions, radii, num_samples, near, far, randomized, disparity, ray_shape,
-                      sample_360=False):
+def sample_along_rays_360(origins, directions, radii, num_samples, near, far, randomized, disparity, ray_shape):
+    batch_size = origins.shape[0]
+    t_samples = torch.linspace(0., 1., num_samples + 1, device=origins.device)
+    far_inv = 1 / far
+    near_inv = 1 / near
+    t_inv = far_inv * t_samples + (1 - t_samples) * near_inv
+
+    if randomized:
+        mids = 0.5 * (t_inv[..., 1:] + t_inv[..., :-1])
+        upper = torch.cat([mids, t_inv[..., -1:]], -1)
+        lower = torch.cat([t_inv[..., :1], mids], -1)
+        t_rand = torch.rand(batch_size, num_samples + 1, device=origins.device)
+        t_inv = lower + (upper - lower) * t_rand
+    else:
+        # Broadcast t_inv to make the returned shape consistent.
+        t_inv = torch.broadcast_to(t_inv, [batch_size, num_samples + 1])
+    t = 1 / t_inv
+    means, covs = cast_rays(t, origins, directions, radii, ray_shape, False)
+    return t_inv, (means, covs)
+
+
+def sample_along_rays(origins, directions, radii, num_samples, near, far, randomized, disparity, ray_shape):
     """
     Stratified sampling along the rays.
     Args:
@@ -111,17 +131,12 @@ def sample_along_rays(origins, directions, radii, num_samples, near, far, random
     batch_size = origins.shape[0]
 
     t_samples = torch.linspace(0., 1., num_samples + 1, device=origins.device)
-    if not sample_360:
-        if disparity:
-            t_samples = 1. / (1. / near * (1. - t_samples) + 1. / far * t_samples)
-        else:
-            # t_samples = near * (1. - t_samples) + far * t_samples
-            t_samples = near + (far - near) * t_samples
+
+    if disparity:
+        t_samples = 1. / (1. / near * (1. - t_samples) + 1. / far * t_samples)
     else:
-        far_inv = 1 / far
-        near_inv = 1 / near
-        t_samples = far_inv * t_samples + (1 - t_samples) * near_inv
-        t_samples = 1 / t_samples
+        # t_samples = near * (1. - t_samples) + far * t_samples
+        t_samples = near + (far - near) * t_samples
 
     if randomized:
         mids = 0.5 * (t_samples[..., 1:] + t_samples[..., :-1])
@@ -132,7 +147,7 @@ def sample_along_rays(origins, directions, radii, num_samples, near, far, random
     else:
         # Broadcast t_samples to make the returned shape consistent.
         t_samples = torch.broadcast_to(t_samples, [batch_size, num_samples + 1])
-    means, covs = cast_rays(t_samples, origins, directions, radii, ray_shape, not sample_360)
+    means, covs = cast_rays(t_samples, origins, directions, radii, ray_shape)
     return t_samples, (means, covs)
 
 
@@ -179,7 +194,6 @@ def sorted_piecewise_constant_pdf(bins, weights, num_samples, randomized):
         u = torch.broadcast_to(u, list(cdf.shape[:-1]) + [num_samples])
     u = u.contiguous()
     try:
-        # this should work fine with the provided environment.yaml
         inds = torch.searchsorted(cdf, u, right=True)
     except:
         # for lower version torch that does not have torch.searchsorted,
@@ -417,25 +431,92 @@ def parameterization(means, covs):
 
 
 if __name__ == '__main__':
-    torch.manual_seed(0)
-    batch_size = 4096
-    origins = torch.rand([batch_size, 3])
-    directions = torch.rand(batch_size, 3)
-    radii = torch.rand([batch_size, 1])
-    num_samples = 64
-    near = torch.rand([batch_size, 1])
-    far = torch.rand([batch_size, 1])
-    randomized = True
-    disparity = False
-    ray_shape = 'cone'
+    # torch.manual_seed(0)
+    # batch_size = 4096
+    # origins = torch.rand([batch_size, 3])
+    # directions = torch.rand(batch_size, 3)
+    # radii = torch.rand([batch_size, 1])
+    # num_samples = 64
+    # near = torch.rand([batch_size, 1])
+    # far = torch.rand([batch_size, 1])
+    # randomized = True
+    # disparity = False
+    # ray_shape = 'cone'
 
-    means = torch.rand(4096, 32, 3, requires_grad=True)
-    convs = torch.rand(4096, 32, 3, 3, requires_grad=True)
+    # means = torch.rand(4096, 32, 3, requires_grad=True)
+    # convs = torch.rand(4096, 32, 3, 3, requires_grad=True)
+    # # print(s.shape)
+    # ss = sample_along_rays(origins, directions, radii, num_samples, near, far, randomized, disparity, ray_shape, True)
+    # print(ss[0].shape, ss[1][0].shape, ss[1][1].shape)
+    # s = integrated_pos_enc_360(ss[1])
     # print(s.shape)
-    ss = sample_along_rays(origins, directions, radii, num_samples, near, far, randomized, disparity, ray_shape, True)
-    print(ss[0].shape, ss[1][0].shape, ss[1][1].shape)
-    s = integrated_pos_enc_360(ss[1])
-    print(s.shape)
     # ss = mipnerf360_scale(means, 0, 2)
     # print(s)
     # print(jac)
+    import matplotlib.pyplot as plt
+    def plot_histogram(weights, bins, label):
+        bar_center = [(bins[i] + bins[i + 1]) / 2. for i in range(len(bins) - 1)]
+        widths = [bins[i + 1] - bins[i] for i in range(len(bins) - 1)]
+        plt.bar(bar_center, weights, widths, alpha=0.3, edgecolor='black', label=label)
+
+    ## As batch
+    batch_size = 3
+    n_samples = 4
+
+    # from MLPprop
+    # w_ = torch.rand(batch_size, n_samples)
+    # t_ = torch.rand(batch_size, n_samples + 1).sort()[0]
+    w_ = torch.tensor([[2, 1, 2.5, 1.1], [2, 1, 2.5, 1.1], [2, 1, 2.5, 1.1]])
+    t_ = torch.tensor([[1, 2, 3, 4, 5], [1, 2, 3, 4, 5], [1, 2, 3, 4, 5]])
+
+    # from MLPnerf
+    # w = torch.rand(batch_size, n_samples)
+    # t = torch.rand(batch_size, n_samples + 1).sort()[0]
+    w = torch.tensor([[3, 2.5, 2, 1.8], [3, 2.5, 2, 1.8], [3, 2.5, 2, 1.8]])
+    t = torch.tensor([[1, 1.2, 2.3, 4.5, 5], [1, 1.1, 1.5, 1.8, 5], [1, 2, 3, 4.5, 5]])
+
+    # bounds
+    ss_tt_ = torch.searchsorted(t, t_)
+    ssr_tt_ = torch.searchsorted(t, t_, right=True)
+
+    ssr_tt_below = ssr_tt_ - 1
+
+    # integral or summed-area table of weights here starts with the value 0
+    integral_w = torch.cat([torch.zeros([batch_size, 1]), torch.cumsum(w, -1)], -1)
+
+    # indices of integral of weights
+    inds = torch.stack([ss_tt_[:, 1:], ssr_tt_below[:, :-1]], -1)
+
+    matched_shape = [inds.shape[0], inds.shape[1], integral_w.shape[-1]]
+    integrals = torch.gather(integral_w.unsqueeze(1).expand(matched_shape), 2, inds)
+
+    # calculate the bounds, similarly to summed-area tables
+    bounds = integrals[..., 0] - integrals[..., 1]
+
+    # equation 13
+    loss = torch.sum(torch.clip(w_ - bounds, 0.0, 1e6)**2 / (w_ + 1e-6))
+    print(loss)
+
+    plt.figure()
+    i = 0
+    plot_histogram(w_[i, :], t_[i, :], 'w_')
+    plot_histogram(w[i, :], t[i, :], 'w')
+    plot_histogram(bounds[i, :], t_[i, :], 'bounds_')
+    plt.legend(loc='upper right')
+    plt.show()
+
+    plt.figure()
+    i = 1
+    plot_histogram(w_[i, :], t_[i, :], 'w_')
+    plot_histogram(w[i, :], t[i, :], 'w')
+    plot_histogram(bounds[i, :], t_[i, :], 'bounds_')
+    plt.legend(loc='upper right')
+    plt.show()
+
+    plt.figure()
+    i = 2
+    plot_histogram(w_[i, :], t_[i, :], 'w_')
+    plot_histogram(w[i, :], t[i, :], 'w')
+    plot_histogram(bounds[i, :], t_[i, :], 'bounds_')
+    plt.legend(loc='upper right')
+    plt.show()
