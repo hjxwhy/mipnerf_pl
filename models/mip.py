@@ -430,7 +430,7 @@ def parameterization(means, covs):
     return means_clone, covs_clone
 
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
     # torch.manual_seed(0)
     # batch_size = 4096
     # origins = torch.rand([batch_size, 3])
@@ -453,70 +453,3 @@ if __name__ == '__main__':
     # ss = mipnerf360_scale(means, 0, 2)
     # print(s)
     # print(jac)
-    import matplotlib.pyplot as plt
-    def plot_histogram(weights, bins, label):
-        bar_center = [(bins[i] + bins[i + 1]) / 2. for i in range(len(bins) - 1)]
-        widths = [bins[i + 1] - bins[i] for i in range(len(bins) - 1)]
-        plt.bar(bar_center, weights, widths, alpha=0.3, edgecolor='black', label=label)
-
-    ## As batch
-    batch_size = 3
-    n_samples = 4
-
-    # from MLPprop
-    # w_ = torch.rand(batch_size, n_samples)
-    # t_ = torch.rand(batch_size, n_samples + 1).sort()[0]
-    w_ = torch.tensor([[2, 1, 2.5, 1.1], [2, 1, 2.5, 1.1], [2, 1, 2.5, 1.1]])
-    t_ = torch.tensor([[1, 2, 3, 4, 5], [1, 2, 3, 4, 5], [1, 2, 3, 4, 5]])
-
-    # from MLPnerf
-    # w = torch.rand(batch_size, n_samples)
-    # t = torch.rand(batch_size, n_samples + 1).sort()[0]
-    w = torch.tensor([[3, 2.5, 2, 1.8], [3, 2.5, 2, 1.8], [3, 2.5, 2, 1.8]])
-    t = torch.tensor([[1, 1.2, 2.3, 4.5, 5], [1, 1.1, 1.5, 1.8, 5], [1, 2, 3, 4.5, 5]])
-
-    # bounds
-    ss_tt_ = torch.searchsorted(t, t_)
-    ssr_tt_ = torch.searchsorted(t, t_, right=True)
-
-    ssr_tt_below = ssr_tt_ - 1
-
-    # integral or summed-area table of weights here starts with the value 0
-    integral_w = torch.cat([torch.zeros([batch_size, 1]), torch.cumsum(w, -1)], -1)
-
-    # indices of integral of weights
-    inds = torch.stack([ss_tt_[:, 1:], ssr_tt_below[:, :-1]], -1)
-
-    matched_shape = [inds.shape[0], inds.shape[1], integral_w.shape[-1]]
-    integrals = torch.gather(integral_w.unsqueeze(1).expand(matched_shape), 2, inds)
-
-    # calculate the bounds, similarly to summed-area tables
-    bounds = integrals[..., 0] - integrals[..., 1]
-
-    # equation 13
-    loss = torch.sum(torch.clip(w_ - bounds, 0.0, 1e6)**2 / (w_ + 1e-6))
-    print(loss)
-
-    plt.figure()
-    i = 0
-    plot_histogram(w_[i, :], t_[i, :], 'w_')
-    plot_histogram(w[i, :], t[i, :], 'w')
-    plot_histogram(bounds[i, :], t_[i, :], 'bounds_')
-    plt.legend(loc='upper right')
-    plt.show()
-
-    plt.figure()
-    i = 1
-    plot_histogram(w_[i, :], t_[i, :], 'w_')
-    plot_histogram(w[i, :], t[i, :], 'w')
-    plot_histogram(bounds[i, :], t_[i, :], 'bounds_')
-    plt.legend(loc='upper right')
-    plt.show()
-
-    plt.figure()
-    i = 2
-    plot_histogram(w_[i, :], t_[i, :], 'w_')
-    plot_histogram(w[i, :], t[i, :], 'w')
-    plot_histogram(bounds[i, :], t_[i, :], 'bounds_')
-    plt.legend(loc='upper right')
-    plt.show()
