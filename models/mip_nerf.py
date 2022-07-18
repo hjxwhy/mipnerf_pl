@@ -243,6 +243,6 @@ class MipNerf(torch.nn.Module):
                 rays.directions,
                 white_bkgd=white_bkgd,
             )
-            ret.append((comp_rgb, distance, acc))
+            ret.append((comp_rgb, distance, acc, weights, t_samples))
 
         return ret

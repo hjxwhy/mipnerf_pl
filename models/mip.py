@@ -5,6 +5,20 @@ from datasets.datasets import Rays_keys, Rays
 from functorch import jacrev, vmap
 
 
+def distloss(weight, samples):
+    '''
+    mip-nerf 360 sec.4
+    weight: [B, N]
+    samples:[N, N+1]
+    '''
+    interval = samples[:, 1:] - samples[:, :-1]
+    mid_points = (samples[:, 1:] + samples[:, :-1]) * 0.5
+    loss_uni = (1/3) * (interval * weight.pow(2)).sum(-1).mean()
+    ww = weight.unsqueeze(-1) * weight.unsqueeze(-2)          # [B,N,N]
+    mm = (mid_points.unsqueeze(-1) - mid_points.unsqueeze(-2)).abs()  # [B,N,N]
+    loss_bi = (ww * mm).sum((-1,-2)).mean()
+    return loss_uni + loss_bi
+
 def lift_gaussian(directions, t_mean, t_var, r_var, diagonal):
     """Lift a Gaussian defined along a ray to 3D coordinates."""
     mean = torch.unsqueeze(directions, dim=-2) * torch.unsqueeze(t_mean, dim=-1)  # [B, 1, 3]*[B, N, 1] = [B, N, 3]
@@ -417,38 +431,41 @@ def parameterization(means, covs):
     means: [B, N, 3]
     covs: [B, N, 3, 3]
     '''
-    contr_mask = (torch.norm(means, dim=-1) > 1).detach()
-    contr_means = means[contr_mask]
-    contr_covs = covs[contr_mask]
-    means_clone = torch.clone(means)
-    covs_clone = torch.clone(covs)
+
+    B, N, _ = means.shape
+    means = means.reshape([-1, 3])
+    if len(covs.shape) == 4:
+        covs = covs.reshape(-1, 3, 3)
+    else:
+        covs = covs.reshape(-1, 3)
+    contr_mask = (torch.norm(means, dim=-1, keepdim=True) > 1).detach()
     with torch.no_grad():
-        jac = vmap(jacrev(contract))(contr_means)
-    contr_covs = jac @ contr_covs @ jac.permute([0, 2, 1])
-    means_clone[contr_mask] = contract(contr_means)
-    covs_clone[contr_mask] = contr_covs
-    return means_clone, covs_clone
+        jac = vmap(jacrev(contract))(means)
+        print('11', jac.shape, covs.shape)
+    means = torch.where(contr_mask, contract(means), means)
+    covs = torch.where(contr_mask.unsqueeze(-1).expand(jac.shape), jac, covs)
+    return means.reshape([B, N, 3]), covs.reshape([B, N, 3, 3])
 
 
-# if __name__ == '__main__':
-    # torch.manual_seed(0)
-    # batch_size = 4096
-    # origins = torch.rand([batch_size, 3])
-    # directions = torch.rand(batch_size, 3)
-    # radii = torch.rand([batch_size, 1])
-    # num_samples = 64
-    # near = torch.rand([batch_size, 1])
-    # far = torch.rand([batch_size, 1])
-    # randomized = True
-    # disparity = False
-    # ray_shape = 'cone'
+if __name__ == '__main__':
+    torch.manual_seed(0)
+    batch_size = 4096
+    origins = torch.rand([batch_size, 3])
+    directions = torch.rand(batch_size, 3)
+    radii = torch.rand([batch_size, 1])
+    num_samples = 64
+    near = torch.rand([batch_size, 1])
+    far = torch.rand([batch_size, 1])
+    randomized = True
+    disparity = False
+    ray_shape = 'cone'
 
-    # means = torch.rand(4096, 32, 3, requires_grad=True)
-    # convs = torch.rand(4096, 32, 3, 3, requires_grad=True)
-    # # print(s.shape)
-    # ss = sample_along_rays(origins, directions, radii, num_samples, near, far, randomized, disparity, ray_shape, True)
-    # print(ss[0].shape, ss[1][0].shape, ss[1][1].shape)
-    # s = integrated_pos_enc_360(ss[1])
+    means = torch.rand(4096, 32, 3, requires_grad=True)
+    convs = torch.rand(4096, 32, 3, 3, requires_grad=True)
+    # print(s.shape)
+    ss = sample_along_rays_360(origins, directions, radii, num_samples, near, far, randomized, disparity, ray_shape)
+    print(ss[0].shape, ss[1][0].shape, ss[1][1].shape)
+    s = integrated_pos_enc_360(ss[1])
     # print(s.shape)
     # ss = mipnerf360_scale(means, 0, 2)
     # print(s)

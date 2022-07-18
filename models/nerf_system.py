@@ -1,7 +1,7 @@
 import torch
 from pytorch_lightning import LightningModule
 from models.mip_nerf import MipNerf
-from models.mip import rearrange_render_image
+from models.mip import rearrange_render_image, distloss
 from utils.metrics import calc_psnr
 from datasets import dataset_dict
 
@@ -49,7 +49,8 @@ class MipNeRFSystem(LightningModule):
 
     def forward(self, batch_rays: torch.Tensor, randomized: bool, white_bkgd: bool):
         # TODO make a multi chunk
-        res = self.mip_nerf(batch_rays, randomized, white_bkgd)  # num_layers result
+        res = self.mip_nerf(batch_rays, randomized,
+                            white_bkgd)  # num_layers result
         return res
 
     def setup(self, stage):
@@ -67,7 +68,8 @@ class MipNeRFSystem(LightningModule):
                                    )
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.mip_nerf.parameters(), lr=self.hparams['optimizer.lr_init'])
+        optimizer = torch.optim.Adam(
+            self.mip_nerf.parameters(), lr=self.hparams['optimizer.lr_init'])
         scheduler = MipLRDecay(optimizer, self.hparams['optimizer.lr_init'], self.hparams['optimizer.lr_final'],
                                self.hparams['optimizer.max_steps'], self.hparams['optimizer.lr_delay_steps'],
                                self.hparams['optimizer.lr_delay_mult'])
@@ -85,7 +87,8 @@ class MipNeRFSystem(LightningModule):
         return DataLoader(self.val_dataset,
                           shuffle=False,
                           num_workers=1,
-                          batch_size=1,  # validate one image (H*W rays) at a time
+                          # validate one image (H*W rays) at a time
+                          batch_size=1,
                           pin_memory=True,
                           persistent_workers=True)
 
@@ -97,14 +100,18 @@ class MipNeRFSystem(LightningModule):
         if self.hparams['loss.disable_multiscale_loss']:
             mask = torch.ones_like(mask)
         losses = []
-        for (rgb, _, _) in ret:
-            losses.append((mask * (rgb - rgbs[..., :3]) ** 2).sum() / mask.sum())
+        distlosses = []
+        for (rgb, _, _, weights, t_samples) in ret:
+            losses.append(
+                (mask * (rgb - rgbs[..., :3]) ** 2).sum() / mask.sum())
+            distlosses.append(distloss(weights, t_samples))
         # The loss is a sum of coarse and fine MSEs
         mse_corse, mse_fine = losses
-        loss = self.hparams['loss.coarse_loss_mult'] * mse_corse + mse_fine
+        loss = self.hparams['loss.coarse_loss_mult'] * \
+            (mse_corse + 0.01 * distlosses[0]) + mse_fine + 0.01*distlosses[-1]
         with torch.no_grad():
             psnrs = []
-            for (rgb, _, _) in ret:
+            for (rgb, _, _, _, _) in ret:
                 psnrs.append(calc_psnr(rgb, rgbs[..., :3]))
             psnr_corse, psnr_fine = psnrs
         self.log('lr', self.optimizers().optimizer.param_groups[0]['lr'])
@@ -118,10 +125,13 @@ class MipNeRFSystem(LightningModule):
         rgb_gt = rgbs[..., :3]
         coarse_rgb, fine_rgb, val_mask = self.render_image(batch)
 
-        val_mse_coarse = (val_mask * (coarse_rgb - rgb_gt) ** 2).sum() / val_mask.sum()
-        val_mse_fine = (val_mask * (fine_rgb - rgb_gt) ** 2).sum() / val_mask.sum()
+        val_mse_coarse = (val_mask * (coarse_rgb - rgb_gt)
+                          ** 2).sum() / val_mask.sum()
+        val_mse_fine = (val_mask * (fine_rgb - rgb_gt)
+                        ** 2).sum() / val_mask.sum()
 
-        val_loss = self.hparams['loss.coarse_loss_mult'] * val_mse_coarse + val_mse_fine
+        val_loss = self.hparams['loss.coarse_loss_mult'] * \
+            val_mse_coarse + val_mse_fine
 
         val_psnr_fine = calc_psnr(fine_rgb, rgb_gt)
 
@@ -141,17 +151,26 @@ class MipNeRFSystem(LightningModule):
     def render_image(self, batch):
         rays, rgbs = batch
         _, height, width, _ = rgbs.shape  # N H W C
-        single_image_rays, val_mask = rearrange_render_image(rays, self.val_chunk_size)
+        single_image_rays, val_mask = rearrange_render_image(
+            rays, self.val_chunk_size)
         coarse_rgb, fine_rgb = [], []
+        distances = []
         with torch.no_grad():
             for batch_rays in single_image_rays:
-                (c_rgb, _, _), (f_rgb, _, _) = self(batch_rays, self.val_randomized, self.white_bkgd)
+                (c_rgb, _, _, _, _), (f_rgb, distance, _, _, _) = self(
+                    batch_rays, self.val_randomized, self.white_bkgd)
                 coarse_rgb.append(c_rgb)
                 fine_rgb.append(f_rgb)
+                distances.append(distance)
 
         coarse_rgb = torch.cat(coarse_rgb, dim=0)
         fine_rgb = torch.cat(fine_rgb, dim=0)
+        distances = torch.cat(distances, dim=0)
+        distances = distances.reshape(1, height, width)  # H W
+        self.logger.experiment.add_image('distance', distances, self.global_step)
 
-        coarse_rgb = coarse_rgb.reshape(1, height, width, coarse_rgb.shape[-1])  # N H W C
-        fine_rgb = fine_rgb.reshape(1, height, width, fine_rgb.shape[-1])  # N H W C
+        coarse_rgb = coarse_rgb.reshape(
+            1, height, width, coarse_rgb.shape[-1])  # N H W C
+        fine_rgb = fine_rgb.reshape(
+            1, height, width, fine_rgb.shape[-1])  # N H W C
         return coarse_rgb, fine_rgb, val_mask
