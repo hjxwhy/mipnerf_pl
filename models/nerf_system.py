@@ -7,7 +7,7 @@ from datasets import dataset_dict
 
 from utils.lr_schedule import MipLRDecay
 from torch.utils.data import DataLoader
-from utils.vis import stack_rgb
+from utils.vis import stack_rgb, visualize_depth
 
 
 class MipNeRFSystem(LightningModule):
@@ -167,6 +167,7 @@ class MipNeRFSystem(LightningModule):
         fine_rgb = torch.cat(fine_rgb, dim=0)
         distances = torch.cat(distances, dim=0)
         distances = distances.reshape(1, height, width)  # H W
+        distances = visualize_depth(distances)
         self.logger.experiment.add_image('distance', distances, self.global_step)
 
         coarse_rgb = coarse_rgb.reshape(
