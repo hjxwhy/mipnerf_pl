@@ -7,4 +7,3 @@ scipy==1.8.0
 imageio-ffmpeg==0.4.5
 tqdm==4.64.0
 open3d==0.14.1
-functorch==0.1.1
