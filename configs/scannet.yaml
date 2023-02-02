@@ -2,13 +2,13 @@ seed: 4
 num_gpus: 1
 precision: 16
 accumulate_grad_batches: 1
-exp_name:  'lego+CDF1-ANNEALDLR-3-100k-PROP' #'PROFILING-fused'
-data_path: '../data/lego-new-half/'
-out_dir: 'OUT/new'
-dataset_name: 'blender'
+exp_name:  'scannet-710' #'lego+CDF1-ANNEALDLR-12-150k-PROP' #'PROFILING-fused'
+data_path: '../data/matterport/scene0710_00/' #'../data/lego-new-half/'
+out_dir: 'OUT/scannet' #new
+dataset_name: 'scannet' #'blender'
 train:
-  batch_size: 2048 #2048
-  num_images: 3 #reduce amount of train images. None means all images are used.
+  batch_size: 8192 #2048
+  num_images: None #reduce amount of train images. None means all images are used.
   batch_type: 'all_images'  # single_image: inputs a full image; all_images: inputs batch_size rays sampled from different image
   num_work: 4
   randomized: True
@@ -20,11 +20,11 @@ val:
   randomized: False
   white_bkgd: True
   check_interval: 2500
-  chunk_size: 3072 #3072  # The amount of input rays in a forward propagation
-  sample_num: 12  # Total number of images verified during once validation
+  chunk_size: 8192 #3072 #3072  # The amount of input rays in a forward propagation
+  sample_num: 8  # Total number of images verified during once validation
 nerf:
-  num_samples: 128  # The number of samples per level.
-  num_levels: 2  # The number of sampling levels.
+  num_samples: 64  # The number of samples per level.
+  num_levels: 3  # The number of sampling levels.
   resample_padding: 0.01  # Dirichlet/alpha "padding" on the histogram.
   stop_resample_grad: True  # If True, don't backprop across levels')
   use_viewdirs: True  # If True, use view directions as a condition.
@@ -53,22 +53,22 @@ nerf:
     num_density_channels: 1  # The number of density channels.
     prop_mlp: True #If a proposal mlp (like in mipnerf 360) should suggest network weights or the 2-stage logic from mipnerf (false).
 optimizer:
-  lr_init: 5e-4  # The initial learning rate.
-  lr_final: 5e-6  # The final learning rate.
-  lr_delay_steps: 2500  # The number of "warmup" learning steps.
+  lr_init: 2e-3  # The initial learning rate.
+  lr_final: 2e-5  # The final learning rate.
+  lr_delay_steps: 512  # The number of "warmup" learning steps.
   lr_delay_mult: 0.01  # How much sever the "warmup" should be.
-  max_steps: 50000 #000 #1000000
+  max_steps: 150000 #000 #1000000
 loss:
   disable_multiscale_loss: False
   coarse_loss_mult: 0.1
   lambda_depth: 0.0 #0.02
   lambda_orientation: 0.0
-  lambda_distortion: 0.0
+  lambda_distortion: 1e-4 #0.0 #0.0 # 0.0 #1e-4
 
-  lambda_normal: 0.00 #0.02//0.05 // 0.001
-  lambda_near_loss: 0.02 #0.02
-  lambda_empty_loss: 0.1 #0.1
+  lambda_normal: 0.0 #8e-5 #0.02//0.05 // 0.001
+  lambda_near_loss: 0.01 #0.02
+  lambda_empty_loss: 1.0 #0.1
 
-  lambda_prop_loss: 0.05 #1.0 
+  lambda_prop_loss: 1.0 #1.0 
 checkpoint:
   resume_path: None #'/home/sheldrick/master/mipnerf_pl/OUT/ckpt/lego-120-D-Test/last.ckpt'

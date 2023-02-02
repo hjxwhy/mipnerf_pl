@@ -8,11 +8,19 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
 
+def l2_normalize(x, eps = torch.finfo(torch.float16).eps):        
+    """Normalize x to unit length along last axis."""
+    return x / torch.sqrt(torch.maximum(torch.sum(x**2, axis=-1, keepdims=True), torch.as_tensor(eps, device = x.device)))
+
+def l2_normalize_np(x, eps = torch.finfo(torch.float32).eps):        
+    """Normalize x to unit length along last axis."""
+    return x / np.sqrt(np.maximum(np.sum(x**2, axis=-1, keepdims=True), np.array(eps)))
 
 def normalize(v):
     """Normalize a vector."""
     return v / np.linalg.norm(v)
 
+to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
 
 def vis_lr(lr_init: float = 5e-4,
            lr_final: float = 5e-6,
@@ -66,13 +74,13 @@ def save_image_tensor(image: torch.tensor, height: int, width: int, save_path: s
 def save_images(rgb, dist, acc, path, idx):
     B, H, W, C = rgb.shape
     color_dist = visualize_depth(dist)
-    color_acc = visualize_depth(acc)
+    #color_acc = visualize_depth(acc)
     save_image_tensor(rgb, H, W, os.path.join(path, str('{:05d}'.format(idx)) + '_rgb' + '.png'))
     save_image_tensor(color_dist, H, W, os.path.join(path, str('{:05d}'.format(idx)) + '_dist' + '.png'), False)
-    save_image_tensor(color_acc, H, W, os.path.join(path, str('{:05d}'.format(idx)) + '_acc' + '.png'), False)
+    save_image_tensor(acc, H, W, os.path.join(path, str('{:05d}'.format(idx)) + '_normals' + '.png'))
 
 
-def visualize_depth(depth, cmap=cv2.COLORMAP_JET):
+def visualize_depth(depth, cmap=cv2.COLORMAP_TURBO): #cmap=cv2.COLORMAP_JET
     """
     depth: (H, W)
     """
@@ -87,6 +95,20 @@ def visualize_depth(depth, cmap=cv2.COLORMAP_JET):
     x_ = Image.fromarray(cv2.applyColorMap(x, cmap))
     x_ = T.ToTensor()(x_)  # (3, H, W)
     return x_
+
+def visualize_normal(x):
+    """
+    tensor:
+    normal: (H, W, 3)
+    """
+    mask = ~torch.any(x, -1)
+    if len(x.shape) > 3:
+        x = np.squeeze(x)
+    x = torch.nan_to_num(x) # change nan to 0
+    x = (x+1)/2
+    x[mask] = 0
+    x = (x)#.permute(2, 0, 1).cpu() #this op is done by stack_imgs
+    return x
 
 
 def gen_render_path(c2ws, N_views=30):
@@ -204,4 +226,10 @@ def stack_rgb(rgb_gt, coarse_rgb, fine_rgb):
     fine_rgb = fine_rgb.squeeze(0).permute(2, 0, 1).cpu()
 
     stack = torch.stack([img_gt, coarse_rgb, fine_rgb])  # (3, 3, H, W)
+    return stack
+
+def stack_imgs(gt, pred):
+    gt = gt.squeeze(0).permute(2, 0, 1).cpu()  # (3, H, W)
+    pred = pred.squeeze(0).permute(2, 0, 1).cpu()
+    stack = torch.stack([gt, pred])  # (3, 3, H, W)
     return stack

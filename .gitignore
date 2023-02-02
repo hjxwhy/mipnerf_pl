@@ -129,3 +129,14 @@ dmypy.json
 .pyre/
 
 .idea/
+
+# Test Files
+.new_results
+.OUT
+new_results
+OUT
+performance
+newresults_propmlp
+**.txt
+**.png
+**.mov
