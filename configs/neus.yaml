@@ -32,7 +32,6 @@ nerf:
   rgb_activation: 'sigmoid'  # The RGB activation.
   rgb_padding: 0.001  # Padding added to the RGB outputs.
   disable_integration: False  # If True, use PE instead of IPE.
-  append_identity: Ture  # If True, append original view direction features
   mlp:
     net_depth: 8  # The depth of the first part of MLP.
     net_width: 256  # The width of the first part of MLP.

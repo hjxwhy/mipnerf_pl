@@ -1,0 +1,22 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "neus",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--out_dir","/data2/lxq/logs/neus",
+                "--data_path", "/data2/lxq/datasets/nerf_synthetic/lego",
+                "--dataset_name", "blender",
+                "exp_name", "debug",
+            ],
+        }
+    ]
+}

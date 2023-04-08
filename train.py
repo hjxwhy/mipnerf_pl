@@ -16,7 +16,7 @@ parser.add_argument("--data_path", help="data path.", type=str, required=True)
 parser.add_argument("--out_dir", help="Output directory.", type=str, required=True)
 parser.add_argument("--dataset_name", help="Single or multi data.", type=str, choices=['multi_blender', 'blender', 'llff'],
                     required=True)
-parser.add_argument("--config", help="Path to config file.", required=False, default='./configs/lego.yaml')
+parser.add_argument("--config", help="Path to config file.", required=False, default='./configs/neus.yaml')
 parser.add_argument("opts", nargs=argparse.REMAINDER,
                     help="Modify hparams. Example: train.py resume out_dir TRAIN.BATCH_SIZE 2")
 

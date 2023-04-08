@@ -414,14 +414,14 @@ class NeusMLP(torch.nn.Module):
           num_rgb_channels: The number of RGB channels.
           num_density_channels: The number of density channels.
         """
-        super(MLP, self).__init__()
+        super(NeusMLP, self).__init__()
         self.skip_index: int = skip_index  # Add a skip connection to the output of every N layers.
         self.enc_xyz, _ = get_embedder(multires_xyz, 3)
-        self.enc_view, _ = get_embedder(multires_view, 9)
+        self.enc_view, _ = get_embedder(multires_view, 6)
         layers = []
-        xyz_dim = 3 * multires_xyz
-        view_dim = 6 * multires_view
-        normal_dim = 3 * multires_xyz
+        xyz_dim = 3 * multires_xyz * 2 + 1
+        view_dim = 3 * multires_view * 2 + 1
+        normal_dim = 3 * multires_view * 2 + 1
         # The first part of MLP.
         for i in range(net_depth):
             if i == 0:
@@ -544,7 +544,7 @@ class NeuS(torch.nn.Module):
                  mlp_num_rgb_channels: int = 3,
                  mlp_num_density_channels: int = 1,
                  mlp_net_activation: str = 'relu'):
-        super(MipNerf, self).__init__()
+        super(NeuS, self).__init__()
         self.num_levels = num_levels  # The number of sampling levels.
         self.num_samples = num_samples  # The number of samples per level.
         self.disparity = disparity  # If True, sample linearly in disparity, not in depth.

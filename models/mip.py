@@ -448,7 +448,7 @@ def parameterization(means, covs):
 
 
 def sample(rays_o, rays_d, num_samples, near, far, randomized, disparity):
-    batch_size = origins.shape[0]
+    batch_size = rays_o.shape[0]
 
     t_samples = torch.linspace(0., 1., num_samples + 1, device=rays_o.device)
 
