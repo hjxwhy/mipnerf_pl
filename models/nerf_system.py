@@ -1,6 +1,6 @@
 import torch
 from pytorch_lightning import LightningModule
-from models.mip_nerf import MipNerf
+from models.mip_nerf import MipNerf, NeuS
 from models.mip import rearrange_render_image, distloss
 from utils.metrics import calc_psnr
 from datasets import dataset_dict
@@ -46,10 +46,36 @@ class MipNeRFSystem(LightningModule):
             mlp_num_density_channels=hparams['nerf.mlp.num_density_channels'],
             mlp_net_activation=hparams['nerf.mlp.net_activation']
         )
+        self.neus = NeuS(
+            num_samples=hparams['nerf.num_samples'],
+            num_levels=hparams['nerf.num_levels'],
+            resample_padding=hparams['nerf.resample_padding'],
+            stop_resample_grad=hparams['nerf.stop_resample_grad'],
+            use_viewdirs=hparams['nerf.use_viewdirs'],
+            disparity=hparams['nerf.disparity'],
+            ray_shape=hparams['nerf.ray_shape'],
+            multires_xyz=hparams['nerf.multires_xyz'],
+            multires_view=hparams['nerf.multires_view'],
+            density_activation=hparams['nerf.density_activation'],
+            density_noise=hparams['nerf.density_noise'],
+            density_bias=hparams['nerf.density_bias'],
+            rgb_activation=hparams['nerf.rgb_activation'],
+            rgb_padding=hparams['nerf.rgb_padding'],
+            disable_integration=hparams['nerf.disable_integration'],
+            append_identity=hparams['nerf.append_identity'],
+            mlp_net_depth=hparams['nerf.mlp.net_depth'],
+            mlp_net_width=hparams['nerf.mlp.net_width'],
+            mlp_net_depth_condition=hparams['nerf.mlp.net_depth_condition'],
+            mlp_net_width_condition=hparams['nerf.mlp.net_width_condition'],
+            mlp_skip_index=hparams['nerf.mlp.skip_index'],
+            mlp_num_rgb_channels=hparams['nerf.mlp.num_rgb_channels'],
+            mlp_num_density_channels=hparams['nerf.mlp.num_density_channels'],
+            mlp_net_activation=hparams['nerf.mlp.net_activation']
+        )
 
     def forward(self, batch_rays: torch.Tensor, randomized: bool, white_bkgd: bool):
         # TODO make a multi chunk
-        res = self.mip_nerf(batch_rays, randomized,
+        res = self.neus(batch_rays, randomized,
                             white_bkgd)  # num_layers result
         return res
 
@@ -69,7 +95,7 @@ class MipNeRFSystem(LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
-            self.mip_nerf.parameters(), lr=self.hparams['optimizer.lr_init'])
+            self.neus.parameters(), lr=self.hparams['optimizer.lr_init'])
         scheduler = MipLRDecay(optimizer, self.hparams['optimizer.lr_init'], self.hparams['optimizer.lr_final'],
                                self.hparams['optimizer.max_steps'], self.hparams['optimizer.lr_delay_steps'],
                                self.hparams['optimizer.lr_delay_mult'])

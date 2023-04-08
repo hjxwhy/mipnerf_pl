@@ -1,0 +1,55 @@
+seed: 4
+num_gpus: 1
+exp_name: 'lego'
+train:
+  batch_size: 3072
+  batch_type: 'all_images'  # single_image: inputs a full image; all_images: inputs batch_size rays sampled from different image
+  num_work: 4
+  randomized: True
+  white_bkgd: True
+val:
+  batch_size: 1
+  batch_type: 'single_image'  # For "single_image", the batch must set to 1
+  num_work: 4
+  randomized: False
+  white_bkgd: True
+  check_interval: 10000
+  chunk_size: 8192  # The amount of input rays in a forward propagation
+  sample_num: 4  # Total number of images verified during once validation
+nerf:
+  num_samples: 128  # The number of samples per level.
+  num_levels: 2  # The number of sampling levels.
+  resample_padding: 0.01  # Dirichlet/alpha "padding" on the histogram.
+  stop_resample_grad: True  # If True, don't backprop across levels')
+  use_viewdirs: True  # If True, use view directions as a condition.
+  disparity: False  # If True, sample linearly in disparity, not in depth.
+  ray_shape: 'cone'  # The shape of cast rays ('cone' or 'cylinder').
+  multires_xyz: 16  # Min degree of positional encoding for 3D points.
+  multires_view: 4  # Max degree of positional encoding for 3D points.
+  density_activation: 'softplus'  # Density activation.
+  density_noise: 0.  # Standard deviation of noise added to raw density.
+  density_bias: -1.  # The shift added to raw densities pre-activation.
+  rgb_activation: 'sigmoid'  # The RGB activation.
+  rgb_padding: 0.001  # Padding added to the RGB outputs.
+  disable_integration: False  # If True, use PE instead of IPE.
+  append_identity: Ture  # If True, append original view direction features
+  mlp:
+    net_depth: 8  # The depth of the first part of MLP.
+    net_width: 256  # The width of the first part of MLP.
+    net_depth_condition: 4  # The depth of the second part of MLP.
+    net_width_condition: 256  # The width of the second part of MLP.
+    net_activation: 'relu'  # The activation function.
+    skip_index: 4  # Add a skip connection to the output of every N layers.
+    num_rgb_channels: 3  # The number of RGB channels.
+    num_density_channels: 1  # The number of density channels.
+optimizer:
+  lr_init: 5e-4  # The initial learning rate.
+  lr_final: 5e-6  # The final learning rate.
+  lr_delay_steps: 2500  # The number of "warmup" learning steps.
+  lr_delay_mult: 0.01  # How much sever the "warmup" should be.
+  max_steps: 1000000
+loss:
+  disable_multiscale_loss: False
+  coarse_loss_mult: 0.1
+checkpoint:
+  resume_path: None
