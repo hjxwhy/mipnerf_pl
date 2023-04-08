@@ -447,6 +447,67 @@ def parameterization(means, covs):
     return means.reshape([B, N, 3]), covs.reshape([B, N, 3, 3])
 
 
+def sample(rays_o, rays_d, num_samples, near, far, randomized, disparity):
+    batch_size = origins.shape[0]
+
+    t_samples = torch.linspace(0., 1., num_samples + 1, device=rays_o.device)
+
+    if disparity:
+        t_samples = 1. / (1. / near * (1. - t_samples) + 1. / far * t_samples)
+    else:
+        # t_samples = near * (1. - t_samples) + far * t_samples
+        t_samples = near + (far - near) * t_samples
+
+    if randomized:
+        mids = 0.5 * (t_samples[..., 1:] + t_samples[..., :-1])
+        upper = torch.cat([mids, t_samples[..., -1:]], -1)
+        lower = torch.cat([t_samples[..., :1], mids], -1)
+        t_rand = torch.rand(batch_size, num_samples + 1, device=rays_o.device)
+        t_samples = lower + (upper - lower) * t_rand
+    else:
+        # Broadcast t_samples to make the returned shape consistent.
+        t_samples = torch.broadcast_to(t_samples, [batch_size, num_samples + 1])
+
+    pts = rays_o[..., None, :] + rays_d[..., None, :] * t_samples[..., None]
+    return t_samples, pts
+
+
+def resample(rays_o, rays_d, t_samples, weights, randomized, stop_grad,
+                        resample_padding):
+    if stop_grad:
+        with torch.no_grad():
+            weights_pad = torch.cat([weights[..., :1], weights, weights[..., -1:]], dim=-1)
+            weights_max = torch.maximum(weights_pad[..., :-1], weights_pad[..., 1:])
+            weights_blur = 0.5 * (weights_max[..., :-1] + weights_max[..., 1:])
+
+            # Add in a constant (the sampling function will renormalize the PDF).
+            weights = weights_blur + resample_padding
+
+            new_t_vals = sorted_piecewise_constant_pdf(
+                t_samples,
+                weights,
+                t_samples.shape[-1],
+                randomized,
+            )
+    else:
+        weights_pad = torch.cat([weights[..., :1], weights, weights[..., -1:]], dim=-1)
+        weights_max = torch.maximum(weights_pad[..., :-1], weights_pad[..., 1:])
+        weights_blur = 0.5 * (weights_max[..., :-1] + weights_max[..., 1:])
+
+        # Add in a constant (the sampling function will renormalize the PDF).
+        weights = weights_blur + resample_padding
+
+        new_t_vals = sorted_piecewise_constant_pdf(
+            t_samples,
+            weights,
+            t_samples.shape[-1],
+            randomized,
+        )
+
+    pts = rays_o[..., None, :] + rays_d[..., None, :] * new_t_vals[..., None]
+    return new_t_vals, pts
+
+
 if __name__ == '__main__':
     torch.manual_seed(0)
     batch_size = 4096
