@@ -5,6 +5,10 @@ from models.mip import sample_along_rays, integrated_pos_enc, pos_enc, volumetri
 from collections import namedtuple
 
 
+def l2_normalize(x, eps=torch.tensor(torch.finfo(torch.float32).eps)):
+    """Normalize x to unit length along last axis."""
+    return x / torch.sqrt(torch.maximum(torch.sum(x**2, dim=-1, keepdims=True), eps))
+
 def _xavier_init(linear):
     """
     Performs the Xavier weight initialization of the linear layer `linear`.
@@ -419,9 +423,9 @@ class NeusMLP(torch.nn.Module):
         self.enc_xyz, _ = get_embedder(multires_xyz, 3)
         self.enc_view, _ = get_embedder(multires_view, 6)
         layers = []
-        xyz_dim = 3 * multires_xyz * 2 + 1
-        view_dim = 3 * multires_view * 2 + 1
-        normal_dim = 3 * multires_view * 2 + 1
+        xyz_dim = 3 * multires_xyz * 2 + 3
+        view_dim = 3 * multires_view * 2 + 3
+        normal_dim = 3 * multires_view * 2 + 3
         # The first part of MLP.
         for i in range(net_depth):
             if i == 0:
@@ -493,14 +497,13 @@ class NeusMLP(torch.nn.Module):
         
         sdf = self.pdf_layer(x_enc) # [B, N, 1]
         # compute the normal
-        grad_outputs = torch.ones_like(sdf, requires_grad=False, device=sdf.device)
+        # https://github.com/gkouros/refnerf-pytorch/blob/main/internal/models.py line 562
         normal = torch.autograd.grad(
-            outputs=sdf,
-            inputs=x, 
-            grad_outputs=grad_outputs,
-            create_graph=True,
-            retain_graph=True,
-            only_inputs=True)[0] # [B, N, 3]
+            sdf,
+            x,
+            torch.ones_like(sdf),
+            retain_graph=True
+        )[0]
 
         if view_direction is not None:
             # Output of the first part of MLP.
@@ -627,3 +630,4 @@ class NeuS(torch.nn.Module):
             ret.append((comp_rgb, distance, acc, weights, t_samples))
 
         return ret
+    
