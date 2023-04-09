@@ -468,7 +468,7 @@ def sample(rays_o, rays_d, num_samples, near, far, randomized, disparity):
         # Broadcast t_samples to make the returned shape consistent.
         t_samples = torch.broadcast_to(t_samples, [batch_size, num_samples + 1])
 
-    pts = rays_o[..., None, :] + rays_d[..., None, :] * t_samples[..., None]
+    pts = rays_o[..., None, :] + rays_d[..., None, :] * t_samples[..., 1:, None]
     return t_samples, pts
 
 
@@ -504,7 +504,7 @@ def resample(rays_o, rays_d, t_samples, weights, randomized, stop_grad,
             randomized,
         )
 
-    pts = rays_o[..., None, :] + rays_d[..., None, :] * new_t_vals[..., None]
+    pts = rays_o[..., None, :] + rays_d[..., None, :] * new_t_vals[..., 1:, None]
     return new_t_vals, pts
 
 
