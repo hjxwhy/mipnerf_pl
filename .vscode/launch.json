@@ -13,8 +13,8 @@
             "justMyCode": true,
             "args": [
                 "--out_dir","/data2/lxq/logs/neus",
-                "--data_path", "/data2/lxq/datasets/nerf_synthetic/lego",
-                "--dataset_name", "blender",
+                "--data_path", "/data2/lxq/datasets/Glass",
+                "--dataset_name", "llff",
                 "exp_name", "debug",
             ]
         }

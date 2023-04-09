@@ -282,7 +282,7 @@ class RealData360(BaseDataset):
         if self.factor > 0:
             imgdir_suffix = '_{}'.format(self.factor)
         else:
-            factor = 1
+            self.factor = 1
         imgdir = path.join(self.data_dir, 'images' + imgdir_suffix)
         if not path.exists(imgdir):
             raise ValueError('Image folder {} does not exist.'.format(imgdir))
@@ -338,7 +338,7 @@ class RealData360(BaseDataset):
         self.K_inv[1:, :] *= -1
         self.bds = bds
         self.images = images
-        self.camtoworlds = poses[:, :3, :4]
+        self.camtoworlds = poses[:, :3, :4].astype(np.float32)
         self.focal = poses[0, -1, -1]
         self.h, self.w = images.shape[1:3]
         self.resolution = self.h * self.w
@@ -419,6 +419,8 @@ class RealData360(BaseDataset):
             self.K = np.array([[params[0], 0, params[2]],
                                [0, params[1], params[3]],
                                [0, 0, 1]])
+            # 转换为float32
+            self.K = self.K.astype(np.float32)
 
     def _poses_avg(self, poses):
         """Average poses according to the original NeRF code."""
