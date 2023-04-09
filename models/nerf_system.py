@@ -99,9 +99,9 @@ class MipNeRFSystem(LightningModule):
             mask = torch.ones_like(mask)
         losses = []
         distlosses = []
-        for (rgb, _, _, weights, t_samples) in ret:
+        for (rgb, _, _, weights, t_samples, normal, normal_pred) in ret:
             losses.append(
-                (mask * (rgb - rgbs[..., :3]) ** 2).sum() / mask.sum())
+                (mask * (rgb - rgbs[..., :3]) ** 2).sum() / mask.sum()+0.1*torch.norm(normal_pred-normal, dim=-1).mean())
             distlosses.append(distloss(weights, t_samples))
         # The loss is a sum of coarse and fine MSEs
         mse_corse, mse_fine = losses
@@ -109,7 +109,7 @@ class MipNeRFSystem(LightningModule):
             (mse_corse + 0.01 * distlosses[0]) + mse_fine + 0.01*distlosses[-1]
         with torch.no_grad():
             psnrs = []
-            for (rgb, _, _, _, _) in ret:
+            for (rgb, _, _, _, _,_,_) in ret:
                 psnrs.append(calc_psnr(rgb, rgbs[..., :3]))
             psnr_corse, psnr_fine = psnrs
         self.log('lr', self.optimizers().optimizer.param_groups[0]['lr'])
@@ -155,7 +155,7 @@ class MipNeRFSystem(LightningModule):
         distances = []
         with torch.no_grad():
             for batch_rays in single_image_rays:
-                (c_rgb, _, _, _, _), (f_rgb, distance, _, _, _) = self(
+                (c_rgb, _, _, _, _,_,_), (f_rgb, distance, _, _, _,_,_) = self(
                     batch_rays, self.val_randomized, self.white_bkgd)
                 coarse_rgb.append(c_rgb)
                 fine_rgb.append(f_rgb)

@@ -449,6 +449,8 @@ class NeusMLP(torch.nn.Module):
         _xavier_init(self.pdf_layer)
         self.extra_layer = torch.nn.Linear(net_width, net_width)  # extra_layer is not the same as NeRF
         _xavier_init(self.extra_layer)
+        self.grad_layer = torch.nn.Linear(net_width, 3)
+        _xavier_init(self.grad_layer)
         layers = []
         # The second part of MLP.
         for i in range(net_depth_condition):
@@ -485,7 +487,8 @@ class NeusMLP(torch.nn.Module):
             raw_density: torch.Tensor(float32), with a shape of
                 [batch, num_samples, num_density_channels].
         """
-        x.requires_grad = True
+        if self.training:
+            x.requires_grad = True
         num_samples = x.shape[1]
         # encode the position
         x_enc = self.enc_xyz(x)
@@ -495,16 +498,21 @@ class NeusMLP(torch.nn.Module):
             if i % self.skip_index == 0 and i > 0:
                 x_enc = torch.cat([x_enc, inputs], dim=-1)
         
+        normal_pred = self.grad_layer(x_enc)
         sdf = self.pdf_layer(x_enc) # [B, N, 1]
         # compute the normal
         # https://github.com/gkouros/refnerf-pytorch/blob/main/internal/models.py line 562
-        normal = torch.autograd.grad(
-            sdf,
-            x,
-            torch.ones_like(sdf),
-            retain_graph=True
-        )[0]
-
+        normal = None
+        if self.training:
+            normal = torch.autograd.grad(
+                sdf,
+                x,
+                torch.ones_like(sdf),
+                retain_graph=True
+            )[0]
+        else:
+            normal = normal_pred
+        
         if view_direction is not None:
             # Output of the first part of MLP.
             bottleneck = self.extra_layer(x_enc)
@@ -512,15 +520,15 @@ class NeusMLP(torch.nn.Module):
             # [batch, num_samples, feature] since all the samples along the same ray
             # have the same viewdir.
             # view_direction: [B, 2*3*L] -> [B, N, 2*3*L]
-            view = torch.cat(view_direction, normal, dim=-1)
+            view_direction = repeat(view_direction, 'batch feature -> batch sample feature', sample=num_samples)
+            view = torch.cat([view_direction, normal], dim=-1)
             view = self.enc_view(view)
-            direction = repeat(view, 'batch feature -> batch sample feature', sample=num_samples)
-            x = torch.cat([bottleneck, direction], dim=-1)
+            x = torch.cat([bottleneck, view], dim=-1)
             # Here use 1 extra layer to align with the original nerf model.
             for _, layer in enumerate(self.view_layers):
                 x = layer(x)
             raw_rgb = self.color_layer(x)
-        return raw_rgb, sdf
+        return raw_rgb, sdf, normal, normal_pred
     
 
 class NeuS(torch.nn.Module):
@@ -602,7 +610,6 @@ class NeuS(torch.nn.Module):
                 t_samples, pts = resample(
                     rays.origins,
                     rays.directions,
-                    rays.radii,
                     t_samples,
                     weights,
                     randomized,
@@ -610,7 +617,7 @@ class NeuS(torch.nn.Module):
                     resample_padding=self.resample_padding,
                 )
 
-            raw_rgb, raw_density = self.mlp(pts, rays.viewdirs)
+            raw_rgb, raw_density, normal, normal_pred = self.mlp(pts, rays.viewdirs)
 
             # Add noise to regularize the density predictions if needed.
             if randomized and (self.density_noise > 0):
@@ -619,6 +626,7 @@ class NeuS(torch.nn.Module):
             # Volumetric rendering.
             rgb = self.rgb_activation(raw_rgb)  # [B, N, 3]
             rgb = rgb * (1 + 2 * self.rgb_padding) - self.rgb_padding
+
             density = self.density_activation(raw_density + self.density_bias)  # [B, N, 1]
             comp_rgb, distance, acc, weights = volumetric_rendering(
                 rgb,
@@ -627,7 +635,7 @@ class NeuS(torch.nn.Module):
                 rays.directions,
                 white_bkgd=white_bkgd,
             )
-            ret.append((comp_rgb, distance, acc, weights, t_samples))
+            ret.append((comp_rgb, distance, acc, weights, t_samples, normal, normal_pred))
 
         return ret
     

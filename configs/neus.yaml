@@ -2,7 +2,7 @@ seed: 4
 num_gpus: 1
 exp_name: 'lego'
 train:
-  batch_size: 3072
+  batch_size: 128
   batch_type: 'all_images'  # single_image: inputs a full image; all_images: inputs batch_size rays sampled from different image
   num_work: 4
   randomized: True
@@ -13,8 +13,8 @@ val:
   num_work: 4
   randomized: False
   white_bkgd: True
-  check_interval: 10000
-  chunk_size: 8192  # The amount of input rays in a forward propagation
+  check_interval: 100
+  chunk_size: 128  # The amount of input rays in a forward propagation
   sample_num: 4  # Total number of images verified during once validation
 nerf:
   num_samples: 128  # The number of samples per level.

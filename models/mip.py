@@ -472,8 +472,7 @@ def sample(rays_o, rays_d, num_samples, near, far, randomized, disparity):
     return t_samples, pts
 
 
-def resample(rays_o, rays_d, t_samples, weights, randomized, stop_grad,
-                        resample_padding):
+def resample(rays_o, rays_d, t_samples, weights, randomized, stop_grad, resample_padding):
     if stop_grad:
         with torch.no_grad():
             weights_pad = torch.cat([weights[..., :1], weights, weights[..., -1:]], dim=-1)
