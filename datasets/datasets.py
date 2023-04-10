@@ -26,8 +26,8 @@ class BaseDataset(Dataset):
 
     def __init__(self, data_dir, split, white_bkgd=True, batch_type='all_images', factor=0):
         super(BaseDataset, self).__init__()
-        self.near = 2
-        self.far = 6
+        self.near = 0
+        self.far = 1
         self.split = split
         self.data_dir = data_dir
         self.white_bkgd = white_bkgd
