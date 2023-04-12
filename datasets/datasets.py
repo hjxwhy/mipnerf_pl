@@ -474,6 +474,219 @@ class RealData360(BaseDataset):
             np.broadcast_to(poses[0, :3, -1:], poses_reset[:, :3, -1:].shape)
         ], -1)
         return poses_reset
+    
+class LLFF(BaseDataset):
+    """RealData360 Dataset."""
+
+    def __init__(self, data_dir, split='train', white_bkgd=True, batch_type='all_images', factor=0):
+        super(LLFF, self).__init__(data_dir, split, white_bkgd, batch_type, factor)
+        if split == 'train':
+            self._train_init()
+        else:
+            # for val and test phase, keep the image shape
+            assert batch_type == 'single_image', 'The batch_type can only be single_image without flatten'
+            self._val_init()
+
+    def _load_renderings(self):
+        """Load images from disk."""
+        # Load images.
+        imgdir_suffix = ''
+        if self.factor > 0:
+            imgdir_suffix = '_{}'.format(self.factor)
+        else:
+            self.factor = 1
+        imgdir = path.join(self.data_dir, 'images' + imgdir_suffix)
+        if not path.exists(imgdir):
+            raise ValueError('Image folder {} does not exist.'.format(imgdir))
+        imgfiles = [
+            path.join(imgdir, f)
+            for f in sorted(os.listdir(imgdir))
+            if f.endswith('JPG') or f.endswith('jpg') or f.endswith('png')
+        ]
+        images = []
+        for imgfile in imgfiles:
+            with open(imgfile, 'rb') as imgin:
+                image = np.array(Image.open(imgin), dtype=np.float32) / 255.
+                images.append(image)
+        images = np.stack(images, axis=-1)
+
+        # Load poses and bds.
+        with open(path.join(self.data_dir, 'poses_bounds.npy'), 'rb') as fp:
+            poses_arr = np.load(fp)
+        poses = poses_arr[:, :-2].reshape([-1, 3, 5]).transpose([1, 2, 0])
+        bds = poses_arr[:, -2:].transpose([1, 0])
+        if poses.shape[-1] != images.shape[-1]:
+            raise RuntimeError('Mismatch between imgs {} and poses {}'.format(
+                images.shape[-1], poses.shape[-1]))
+
+        # Update poses according to downsampling.
+        poses[:2, 4, :] = np.array(images.shape[:2]).reshape([2, 1])
+        poses[2, 4, :] = poses[2, 4, :] * 1. / self.factor
+
+        # Correct rotation matrix ordering and move variable dim to axis 0.
+        poses = np.concatenate(
+            [poses[:, 1:2, :], -poses[:, 0:1, :], poses[:, 2:, :]], 1)
+        poses = np.moveaxis(poses, -1, 0).astype(np.float32)
+        images = np.moveaxis(images, -1, 0)
+        bds = np.moveaxis(bds, -1, 0).astype(np.float32)
+
+        # Recenter poses.
+        poses = self._recenter_poses(poses)
+        poses = self._spherify_poses(poses)
+        # Select the split.
+        llffhold = 8
+        i_test = np.arange(images.shape[0])[::llffhold]
+        i_train = np.array(
+            [i for i in np.arange(int(images.shape[0])) if i not in i_test])
+        if self.split == 'train':
+            indices = i_train
+        else:
+            indices = i_test
+        images = images[indices]
+        poses = poses[indices]
+        bds = bds[indices]
+        self._read_camera()
+        self.K[:2, :] /= self.factor
+        self.K_inv = np.linalg.inv(self.K)
+        self.K_inv[1:, :] *= -1
+        self.bds = bds
+        self.images = images
+        self.camtoworlds = poses[:, :3, :4].astype(np.float32)
+        self.focal = poses[0, -1, -1]
+        self.h, self.w = images.shape[1:3]
+        self.resolution = self.h * self.w
+        self.n_examples = images.shape[0]
+
+    def _generate_rays(self):
+        """Generating rays for all images."""
+
+        def res2grid(w, h):
+            return np.meshgrid(  # pylint: disable=unbalanced-tuple-unpacking
+                np.arange(w, dtype=np.float32) + .5,  # X-Axis (columns)
+                np.arange(h, dtype=np.float32) + .5,  # Y-Axis (rows)
+                indexing='xy')
+
+        xy = res2grid(self.w, self.h)
+        pixel_dirs = np.stack([xy[0], xy[1], np.ones_like(xy[0])], axis=-1)
+        camera_dirs = pixel_dirs @ self.K_inv.T
+        directions = ((camera_dirs[None, ..., None, :] * self.camtoworlds[:, None, None, :3, :3]).sum(axis=-1))
+        origins = np.broadcast_to(self.camtoworlds[:, None, None, :3, -1],
+                                  directions.shape)
+        viewdirs = directions / np.linalg.norm(directions, axis=-1, keepdims=True)
+
+        # Distance from each unit-norm direction vector to its x-axis neighbor.
+        dx = np.sqrt(
+            np.sum((directions[:, :-1, :, :] - directions[:, 1:, :, :]) ** 2, -1))
+        dx = np.concatenate([dx, dx[:, -2:-1, :]], 1)
+
+        # Cut the distance in half, and then round it out so that it's
+        # halfway between inscribed by / circumscribed about the pixel.
+        radii = dx[..., None] * 2 / np.sqrt(12)
+        ones = np.ones_like(origins[..., :1])
+        near_fars = np.broadcast_to(self.bds[:, None, None, :], [*directions.shape[:-1], 2])
+        self.rays = Rays(
+            origins=origins,
+            directions=directions,
+            viewdirs=viewdirs,
+            radii=radii,
+            lossmult=ones,
+            near=near_fars[..., 0:1],
+            far=near_fars[..., 1:2])
+        del origins, directions, viewdirs, radii, near_fars, ones, xy, pixel_dirs, camera_dirs
+
+    def _recenter_poses(self, poses):
+        """Recenter poses according to the original NeRF code."""
+        poses_ = poses.copy()
+        bottom = np.reshape([0, 0, 0, 1.], [1, 4])
+        c2w = self._poses_avg(poses)
+        c2w = np.concatenate([c2w[:3, :4], bottom], -2)
+        bottom = np.tile(np.reshape(bottom, [1, 1, 4]), [poses.shape[0], 1, 1])
+        poses = np.concatenate([poses[:, :3, :4], bottom], -2)
+        poses = np.linalg.inv(c2w) @ poses
+        poses_[:, :3, :4] = poses[:, :3, :4]
+        poses = poses_
+        return poses
+
+    def _read_camera(self):
+        import struct
+        # modified from https://github.com/colmap/colmap/blob/dev/scripts/python/read_write_model.py
+
+        def read_next_bytes(fid, num_bytes, format_char_sequence, endian_character="<"):
+            """Read and unpack the next bytes from a binary file.
+            :param fid:
+            :param num_bytes: Sum of combination of {2, 4, 8}, e.g. 2, 6, 16, 30, etc.
+            :param format_char_sequence: List of {c, e, f, d, h, H, i, I, l, L, q, Q}.
+            :param endian_character: Any of {@, =, <, >, !}
+            :return: Tuple of read and unpacked values.
+            """
+            data = fid.read(num_bytes)
+            return struct.unpack(endian_character + format_char_sequence, data)
+
+        with open(path.join(self.data_dir, 'sparse', '0', 'cameras.bin'), "rb") as fid:
+            num_cameras = read_next_bytes(fid, 8, "Q")[0]
+            camera_properties = read_next_bytes(
+                fid, num_bytes=24, format_char_sequence="iiQQ")
+            num_params = 4
+            params = read_next_bytes(fid, num_bytes=8 * num_params,
+                                     format_char_sequence="d" * num_params)
+            self.K = np.array([[params[0], 0, params[2]],
+                               [0, params[1], params[3]],
+                               [0, 0, 1]])
+            # 转换为float32
+            self.K = self.K.astype(np.float32)
+
+    def _poses_avg(self, poses):
+        """Average poses according to the original NeRF code."""
+        hwf = poses[0, :3, -1:]
+        center = poses[:, :3, 3].mean(0)
+        vec2 = self._normalize(poses[:, :3, 2].sum(0))
+        up = poses[:, :3, 1].sum(0)
+        c2w = np.concatenate([self._viewmatrix(vec2, up, center), hwf], 1)
+        return c2w
+
+    def _viewmatrix(self, z, up, pos):
+        """Construct lookat view matrix."""
+        vec2 = self._normalize(z)
+        vec1_avg = up
+        vec0 = self._normalize(np.cross(vec1_avg, vec2))
+        vec1 = self._normalize(np.cross(vec2, vec0))
+        m = np.stack([vec0, vec1, vec2, pos], 1)
+        return m
+
+    def _normalize(self, x):
+        """Normalization helper function."""
+        return x / np.linalg.norm(x)
+
+    def _spherify_poses(self, poses):
+        p34_to_44 = lambda p: np.concatenate([
+            p,
+            np.tile(np.reshape(np.eye(4)[-1, :], [1, 1, 4]), [p.shape[0], 1, 1])
+        ], 1)
+        rays_d = poses[:, :3, 2:3]
+        rays_o = poses[:, :3, 3:4]
+
+        def min_line_dist(rays_o, rays_d):
+            a_i = np.eye(3) - rays_d * np.transpose(rays_d, [0, 2, 1])
+            b_i = -a_i @ rays_o
+            pt_mindist = np.squeeze(-np.linalg.inv(
+                (np.transpose(a_i, [0, 2, 1]) @ a_i).mean(0)) @ (b_i).mean(0))
+            return pt_mindist
+
+        pt_mindist = min_line_dist(rays_o, rays_d)
+        center = pt_mindist
+        up = (poses[:, :3, 3] - center).mean(0)
+        vec0 = self._normalize(up)
+        vec1 = self._normalize(np.cross([.1, .2, .3], vec0))
+        vec2 = self._normalize(np.cross(vec0, vec1))
+        pos = center
+        c2w = np.stack([vec1, vec2, vec0, pos], 1)
+        poses_reset = (
+                np.linalg.inv(p34_to_44(c2w[None])) @ p34_to_44(poses[:, :3, :4]))
+        poses_reset = np.concatenate([
+            poses_reset[:, :3, :4],
+            np.broadcast_to(poses[0, :3, -1:], poses_reset[:, :3, -1:].shape)
+        ], -1)
+        return poses_reset
 
 
 def contract(x):

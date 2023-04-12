@@ -101,7 +101,7 @@ class MipNeRFSystem(LightningModule):
         distlosses = []
         for (rgb, _, _, weights, t_samples, normal, normal_pred) in ret:
             losses.append(
-                (mask * (rgb - rgbs[..., :3]) ** 2).sum() / mask.sum()+0.1*torch.norm(normal_pred-normal, dim=-1).mean())
+                (mask * (rgb - rgbs[..., :3]) ** 2).sum() / mask.sum()+0.0001*torch.norm(normal_pred-normal, dim=-1).mean())
             distlosses.append(distloss(weights, t_samples))
         # The loss is a sum of coarse and fine MSEs
         mse_corse, mse_fine = losses

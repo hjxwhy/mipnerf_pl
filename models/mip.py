@@ -2,6 +2,8 @@ import torch
 from einops import rearrange
 import numpy as np
 from datasets.datasets import Rays_keys, Rays
+import torch.nn.functional as F
+
 #from functorch import jacrev, vmap
 
 
@@ -507,26 +509,52 @@ def resample(rays_o, rays_d, t_samples, weights, randomized, stop_grad, resample
     return new_t_vals, pts
 
 
-if __name__ == '__main__':
-    torch.manual_seed(0)
-    batch_size = 4096
-    origins = torch.rand([batch_size, 3])
-    directions = torch.rand(batch_size, 3)
-    radii = torch.rand([batch_size, 1])
-    num_samples = 64
-    near = torch.rand([batch_size, 1])
-    far = torch.rand([batch_size, 1])
-    randomized = True
-    disparity = False
-    ray_shape = 'cone'
+def sdf_rendering(rgb, sdf, t_samples, dirs, normal,deviation_network,white_bkgd):
+    """sdf Rendering Function.
+Args:
+    rgb: torch.Tensor, color, [batch_size, num_samples, 3]
+    density: torch.Tensor, density, [batch_size, num_samples, 1].
+    t_samples: torch.Tensor, [batch_size, num_samples+1].
+    dirs: torch.Tensor, [batch_size, 3].
+    white_bkgd: bool.
+Returns:
+    comp_rgb: torch.Tensor, [batch_size, 3].
+    disp: torch.Tensor, [batch_size].
+    acc: torch.Tensor, [batch_size].
+    weights: torch.Tensor, [batch_size, num_samples]
+"""  
+    cos_anneal_ratio = 0.5
+    batch_size, n_samples, _ = rgb.shape
+    dists = t_samples[..., 1:] - t_samples[..., :-1]
+    # sample_dist = dists[..., -1:] #
+    # dists = torch.cat([dists, torch.Tensor([sample_dist]).expand(dists[..., :1].shape)], -1)
+    t_mids = 0.5 * (t_samples[..., :-1] + t_samples[..., 1:])
+    inv_s = deviation_network(torch.zeros([1, 3]))[:, :1].clip(1e-6, 1e6)           # Single parameter
+    inv_s = inv_s.expand(batch_size * n_samples, 1)
+    true_cos = (dirs * normal).sum(-1, keepdim=True)
+    iter_cos = -(F.relu(-true_cos * 0.5 + 0.5) * (1.0 - cos_anneal_ratio) +
+                F.relu(-true_cos) * cos_anneal_ratio)  # always non-positive
+    # Estimate signed distances at section points
+    estimated_next_sdf = sdf + iter_cos * dists.reshape(-1, 1) * 0.5
+    estimated_prev_sdf = sdf - iter_cos * dists.reshape(-1, 1) * 0.5
 
-    means = torch.rand(4096, 32, 3, requires_grad=True)
-    convs = torch.rand(4096, 32, 3, 3, requires_grad=True)
-    # print(s.shape)
-    ss = sample_along_rays_360(origins, directions, radii, num_samples, near, far, randomized, disparity, ray_shape)
-    print(ss[0].shape, ss[1][0].shape, ss[1][1].shape)
-    s = integrated_pos_enc_360(ss[1])
-    # print(s.shape)
-    # ss = mipnerf360_scale(means, 0, 2)
-    # print(s)
-    # print(jac)
+    prev_cdf = torch.sigmoid(estimated_prev_sdf * inv_s)
+    next_cdf = torch.sigmoid(estimated_next_sdf * inv_s)
+
+    p = prev_cdf - next_cdf
+    c = prev_cdf
+
+    alpha = ((p + 1e-5) / (c + 1e-5)).reshape(batch_size, n_samples).clip(0.0, 1.0)
+
+    # pts_norm = torch.linalg.norm(pts, ord=2, dim=-1, keepdim=True).reshape(batch_size, n_samples)
+    # inside_sphere = (pts_norm < 1.0).float().detach()
+    # relax_inside_sphere = (pts_norm < 1.2).float().detach()
+    weights = alpha * torch.cumprod(torch.cat([torch.ones([batch_size, 1]), 1. - alpha + 1e-7], -1), -1)[:, :-1]
+    acc = weights.sum(dim=-1, keepdim=True)    
+    comp_rgb = (rgb * weights[:, :, None]).sum(dim=1)
+    distance = (weights * t_mids).sum(axis=-1)
+    distance = torch.clamp(torch.nan_to_num(distance), t_samples[:, 0], t_samples[:, -1])
+    if white_bkgd :    # Fixed background, usually black
+        pass
+
+    return comp_rgb, distance, acc, weights

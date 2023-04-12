@@ -58,7 +58,8 @@ def main(hparams):
         benchmark=True,
         profiler="simple" if hparams['num_gpus'] == 1 else None,
         strategy=DDPPlugin(find_unused_parameters=False) if hparams['num_gpus'] > 1 else None,
-        limit_val_batches=hparams['val.sample_num']
+        limit_val_batches=hparams['val.sample_num'],
+        fast_dev_run=True
     )
 
     trainer.fit(system, ckpt_path=hparams['checkpoint.resume_path'])

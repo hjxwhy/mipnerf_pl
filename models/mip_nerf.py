@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from einops import repeat
-from models.mip import sample_along_rays, integrated_pos_enc, pos_enc, volumetric_rendering, resample_along_rays, sample, resample
+from models.mip import sample_along_rays, integrated_pos_enc, pos_enc, volumetric_rendering, resample_along_rays, sample, resample, sdf_rendering
 from collections import namedtuple
 
 
@@ -580,7 +580,7 @@ class NeuS(torch.nn.Module):
             self.density_activation = torch.nn.Softplus()
         else:
             raise NotImplementedError 
-        
+        self.deviation_network = SingleVarianceNetwork(0.3).to('cuda')
     def forward(self, rays: namedtuple, randomized: bool, white_bkgd: bool):
         """The mip-NeRF Model.
         Args:
@@ -628,14 +628,30 @@ class NeuS(torch.nn.Module):
             rgb = rgb * (1 + 2 * self.rgb_padding) - self.rgb_padding
 
             density = self.density_activation(raw_density + self.density_bias)  # [B, N, 1]
-            comp_rgb, distance, acc, weights = volumetric_rendering(
+            # comp_rgb, distance, acc, weights = volumetric_rendering(
+            #     rgb,
+            #     density,
+            #     t_samples,
+            #     rays.directions,
+            #     white_bkgd=white_bkgd,
+            # )
+            comp_rgb, distance, acc, weights = sdf_rendering(
                 rgb,
                 density,
                 t_samples,
                 rays.directions,
-                white_bkgd=white_bkgd,
+                normal,
+                self.deviation_network,
+                white_bkgd,
             )
             ret.append((comp_rgb, distance, acc, weights, t_samples, normal, normal_pred))
 
         return ret
     
+class SingleVarianceNetwork(torch.nn.Module):
+    def __init__(self, init_val):
+        super(SingleVarianceNetwork, self).__init__()
+        self.register_parameter('variance', torch.nn.Parameter(torch.tensor(init_val)))
+
+    def forward(self, x):
+        return torch.ones([len(x), 1]) * torch.exp(self.variance * 10.0)
